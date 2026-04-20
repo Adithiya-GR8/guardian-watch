@@ -71,7 +71,7 @@ export function Chart({
                 color: "var(--foreground)",
               }}
               labelFormatter={() => ""}
-              formatter={(v: number) => [v.toFixed(precision) + (unit ? ` ${unit}` : ""), title]}
+              formatter={(v) => [Number(v).toFixed(precision) + (unit ? ` ${unit}` : ""), title]}
             />
             <Area
               type="monotone"
