@@ -106,15 +106,14 @@ function Dashboard() {
         : "ok";
 
   return (
-    <div className="grid-bg min-h-screen text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
         {/* Header */}
         <header className="mb-6 flex flex-col gap-1 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               <span
-                className="inline-block h-1.5 w-1.5 rounded-full"
-                style={{ background: "var(--primary)", boxShadow: "0 0 8px var(--primary)" }}
+                className="inline-block h-1.5 w-1.5 rounded-full bg-primary"
               />
               Substation TR-04 · Live Telemetry
             </div>

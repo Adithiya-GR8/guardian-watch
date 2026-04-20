@@ -21,11 +21,6 @@ export function ControlPanel({ running, onStart, onStop }: Props) {
               "pulse-dot inline-block h-2.5 w-2.5 rounded-full",
               running ? "bg-success" : "bg-critical",
             )}
-            style={{
-              boxShadow: running
-                ? "0 0 12px 2px oklch(0.72 0.18 150 / 0.45)"
-                : "0 0 12px 2px oklch(0.64 0.24 25 / 0.45)",
-            }}
           />
           <span className="text-sm font-medium text-foreground">
             System {running ? "Running" : "Stopped"}
@@ -44,15 +39,6 @@ export function ControlPanel({ running, onStart, onStop }: Props) {
           onClick={onStart}
           disabled={running}
           className="flex-1 gap-2 sm:flex-none"
-          style={
-            !running
-              ? {
-                  background: "var(--gradient-primary)",
-                  color: "var(--primary-foreground)",
-                  boxShadow: "var(--shadow-glow)",
-                }
-              : undefined
-          }
         >
           <Play className="h-4 w-4" />
           Start System

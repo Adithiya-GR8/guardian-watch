@@ -27,11 +27,7 @@ export function MLPanel({ vibration, temperature, failure }: Props) {
         "rounded-xl border bg-card p-5 transition-colors",
         failure ? "border-critical/50" : "border-border",
       )}
-      style={{
-        boxShadow: failure
-          ? "0 0 0 1px oklch(0.64 0.24 25 / 0.25), 0 8px 32px -8px oklch(0.64 0.24 25 / 0.35)"
-          : "var(--shadow-panel)",
-      }}
+      style={{ boxShadow: "var(--shadow-panel)" }}
     >
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
