@@ -35,6 +35,8 @@ type Series = { t: number; v: number }[];
 
 function Dashboard() {
   const [running, setRunning] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [offline, setOffline] = useState(true);
   const [latest, setLatest] = useState<SensorPayload | null>(null);
   const [oilSeries, setOilSeries] = useState<Series>([]);
   const [flowSeries, setFlowSeries] = useState<Series>([]);
@@ -44,22 +46,32 @@ function Dashboard() {
 
   useEffect(() => {
     const offStatus = sim.onStatus(setRunning);
-    const offData = sim.onData((p) => {
+    const offData = (p: SensorPayload) => {
+      // Update latest state regardless of connection (could be simulator)
+      setLatest(p);
+
+      // Only skip chart updates if we literally have no data (STOPPED or ERROR without payload)
+      if (p.status !== "RUNNING") return;
+
       counter.current += 1;
       const t = counter.current;
-      setLatest(p);
       setOilSeries((s) => trim([...s, { t, v: p.oilTemp }]));
       setFlowSeries((s) => trim([...s, { t, v: p.flow }]));
       setVibSeries((s) => trim([...s, { t, v: p.vibration }]));
       setHealthSeries((s) => trim([...s, { t, v: p.healthIndex }]));
-    });
+    };
+    const offDataListener = sim.onData(offData);
+    const offServer = sim.onServerStatus(setOffline);
     return () => {
       offStatus();
-      offData();
+      offDataListener();
+      offServer();
     };
   }, []);
 
   const handleStart = () => {
+    setLatest(null); // Clear previous errors
+    setHasStarted(true);
     counter.current = 0;
     setOilSeries([]);
     setFlowSeries([]);
@@ -68,15 +80,29 @@ function Dashboard() {
     sim.start();
   };
 
-  const oilStatus = !latest
+  const handleStop = () => {
+    setHasStarted(false);
+    setLatest(null);
+    sim.stop();
+  };
+
+  const handleTryAgain = async () => {
+    handleStop();
+    // Small delay to ensure backend cleanup completes
+    setTimeout(() => {
+      handleStart();
+    }, 100);
+  };
+
+  const oilStatus = !latest?.mlPrediction
     ? "muted"
-    : latest.mlPrediction.temperature === "CRITICAL"
+    : latest.mlPrediction.temperature === "FAILURE"
       ? "crit"
       : latest.mlPrediction.temperature === "WARNING"
         ? "warn"
         : "ok";
   const ambStatus = "ok" as const;
-  const diffStatus = !latest
+  const diffStatus = !latest || latest.tempDiff === null
     ? "muted"
     : latest.tempDiff > THRESH.tempDiffMax
       ? "crit"
@@ -106,7 +132,43 @@ function Dashboard() {
         : "ok";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative min-h-screen bg-background text-foreground">
+      {/* Server Offline Warning */}
+      {offline && (
+        <div className="bg-destructive/10 border-b border-destructive/20 py-2 text-center text-[11px] font-medium text-destructive">
+          BACKEND SERVER OFFLINE: Please run 'npm run dev' inside the /backend folder
+        </div>
+      )}
+
+      {/* Machine Connection Overlay - Only shown if not in simulator and hardware fails */}
+      {hasStarted && latest && !latest.machineConnected && latest.mode !== "SIMULATOR" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="max-w-md rounded-2xl border border-destructive/20 bg-card p-8 text-center shadow-2xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 2-2 2m-7.61 7.61a2 2 0 1 0 2.82 2.82"/><path d="M10 14 8 16"/><path d="m6.63 6.63 3.37 3.37"/><path d="M5 19 2 22"/><path d="M22 2 15 9"/><path d="M9 15 2 22"/><path d="M18 13v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><path d="m22 2-7 7"/></svg>
+            </div>
+            <h2 className="mt-4 text-xl font-bold">Machine Not Attached</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Could not detect Arduino on the configured port.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button 
+                onClick={handleTryAgain}
+                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Try Again
+              </button>
+              <button 
+                onClick={handleStop}
+                className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent"
+              >
+                Go Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
         {/* Header */}
         <header className="mb-6 flex flex-col gap-1 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
@@ -133,7 +195,7 @@ function Dashboard() {
         <ControlPanel
           running={running}
           onStart={handleStart}
-          onStop={() => sim.stop()}
+          onStop={handleStop}
         />
 
         {/* Metrics grid */}
@@ -233,9 +295,9 @@ function Dashboard() {
           <span>
             Endpoints: <span className="font-mono">POST /api/start</span> ·{" "}
             <span className="font-mono">POST /api/stop</span> ·{" "}
-            <span className="font-mono">/ws/data</span>
+            <span className="font-mono">ws://localhost:3001</span>
           </span>
-          <span>v1.0 · Mock data layer active</span>
+          <span>v1.0 · Serial telemetry active</span>
         </footer>
       </div>
     </div>

@@ -1,0 +1,95 @@
+# ==========================================
+# IMPORTS
+# ==========================================
+import os
+import numpy as np
+from scipy.io import loadmat
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, RepeatVector, Dense
+import joblib
+
+# ==========================================
+# LOAD ALL MAT FILES (FIXED FOR PADERBORN)
+# ==========================================
+def extract_signal_from_file(file_path):
+    try:
+        data = loadmat(file_path)
+        key = [k for k in data.keys() if not k.startswith("__")][0]
+        obj = data[key][0][0]
+        
+        Y = obj['Y'][0]
+        for item in Y:
+            try:
+                for element in item:
+                    if isinstance(element, np.ndarray) and element.size > 1000:
+                        return element.flatten()
+            except:
+                continue
+    except Exception as e:
+        print(f"Error in {file_path}: {e}")
+    return None
+
+def load_all_mat_files(folder_path, max_files=5):
+    all_signals = []
+    files = sorted([f for f in os.listdir(folder_path) if f.endswith(".mat")])
+    for file in files[:max_files]:
+        file_path = os.path.join(folder_path, file)
+        signal = extract_signal_from_file(file_path)
+        if signal is not None:
+            all_signals.append(signal)
+            print(f"✅ Loaded {file}")
+        else:
+            print(f"⚠️ Could not extract signal from {file}")
+    if len(all_signals) == 0:
+        raise ValueError("❌ No valid signals extracted.")
+    return np.concatenate(all_signals)
+
+# ==========================================
+# DATA PREPARATION
+# ==========================================
+K001_PATH = "datasets_small/K001"
+K002_PATH = "datasets_small/K002"
+
+signal1 = load_all_mat_files(K001_PATH, max_files=3)
+signal2 = load_all_mat_files(K002_PATH, max_files=3)
+signal = np.concatenate([signal1, signal2])
+
+DOWNSAMPLE_FACTOR = 100
+signal = signal[::DOWNSAMPLE_FACTOR]
+scaler = MinMaxScaler()
+signal = scaler.fit_transform(signal.reshape(-1,1)).flatten()
+
+WINDOW_SIZE = 50
+STEP_SIZE = 10
+
+def create_features(data):
+    windows = [data[i:i+WINDOW_SIZE] for i in range(0, len(data) - WINDOW_SIZE, STEP_SIZE)]
+    feats = [[np.mean(w), np.std(w), np.max(w), np.min(w), np.sqrt(np.mean(w**2))] for w in windows]
+    return np.array(feats)
+
+X_features = create_features(signal)
+X = X_features.reshape(X_features.shape[0], 1, X_features.shape[1])
+
+# ==========================================
+# AUTOENCODER MODEL (FIXED ARCHITECTURE)
+# ==========================================
+num_features = X.shape[2]
+inputs = Input(shape=(1, num_features))
+encoded = LSTM(16, activation='relu')(inputs)
+decoded = RepeatVector(1)(encoded)
+decoded = LSTM(16, activation='relu', return_sequences=True)(decoded)
+# Added Dense layer to match the input feature dimension (5)
+outputs = Dense(num_features)(decoded)
+
+model = Model(inputs, outputs)
+model.compile(optimizer='adam', loss='mse')
+
+# ==========================================
+# TRAIN AND SAVE
+# ==========================================
+model.fit(X, X, epochs=15, batch_size=32, validation_split=0.1, verbose=1)
+
+model.save("vibration_model.h5")
+joblib.dump(scaler, "scaler.pkl")
+print("✅ MODEL TRAINED AND SAVED")

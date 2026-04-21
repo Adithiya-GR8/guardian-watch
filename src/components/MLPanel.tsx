@@ -8,16 +8,20 @@ type Props = {
   failure: boolean;
 };
 
-const dot: Record<MlState, string> = {
-  NORMAL: "bg-success",
-  WARNING: "bg-warning",
-  CRITICAL: "bg-critical",
+const statusBg: Record<MlState, string> = {
+  NORMAL: "bg-success/10",
+  WARNING: "bg-warning/10",
+  FAILURE: "bg-critical/10",
+  MODEL_NOT_FOUND: "bg-muted/10",
+  SERVICE_DOWN: "bg-muted/10",
 };
 
-const text: Record<MlState, string> = {
+const statusColor: Record<MlState, string> = {
   NORMAL: "text-success",
   WARNING: "text-warning",
-  CRITICAL: "text-critical",
+  FAILURE: "text-critical",
+  MODEL_NOT_FOUND: "text-muted-foreground",
+  SERVICE_DOWN: "text-muted-foreground",
 };
 
 export function MLPanel({ vibration, temperature, failure }: Props) {
@@ -88,9 +92,9 @@ export function MLPanel({ vibration, temperature, failure }: Props) {
           {label}
         </div>
         <div className="flex items-center gap-2">
-          <span className={cn("h-2 w-2 rounded-full", dot[state])} />
-          <span className={cn("font-mono text-xs uppercase tracking-wider", text[state])}>
-            {state}
+          <span className={cn("h-2 w-2 rounded-full", statusBg[state].replace("/10", ""))} />
+          <span className={cn("font-mono text-xs uppercase tracking-wider", statusColor[state])}>
+            {state.replace("_", " ")}
           </span>
         </div>
       </div>

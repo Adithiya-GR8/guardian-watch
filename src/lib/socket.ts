@@ -1,11 +1,12 @@
-// Real-time data layer.
-// Currently uses a deterministic mock simulator that emits the exact JSON
-// contract from the spec. To switch to a real backend, replace `connect()`
-// with a WebSocket to `/ws/data` — the SensorPayload shape is unchanged.
+// Production data layer - Connects to Node.js Backend
+// This replaces the mock simulator with a real WebSocket connection.
 
-export type MlState = "NORMAL" | "WARNING" | "CRITICAL";
+export type MlState = "NORMAL" | "WARNING" | "FAILURE" | "MODEL_NOT_FOUND" | "SERVICE_DOWN";
 
 export type SensorPayload = {
+  status: "RUNNING" | "ERROR" | "STOPPED";
+  machineConnected: boolean;
+  mode: "HARDWARE" | "SIMULATOR" | "IDLE";
   oilTemp: number;
   ambientTemp: number;
   flow: number;
@@ -19,6 +20,7 @@ export type SensorPayload = {
     failure: boolean;
   };
   ts: number;
+  message?: string;
 };
 
 export type AlertCode =
@@ -26,27 +28,74 @@ export type AlertCode =
   | "HIGH_VIBRATION"
   | "HIGH_TEMP_DIFF"
   | "LOW_HEALTH"
+  | "CRITICAL_TEMPERATURE"
   | "ML_FAILURE_PREDICTED";
 
 type Listener = (p: SensorPayload) => void;
 
 const THRESH = {
   flowMin: 2.5,
-  vibrationMax: 0.35,
-  tempDiffMax: 18,
-  healthMin: 55,
+  vibrationMax: 0.20,
+  tempDiffMax: 15.0,
+  healthMin: 60,
 };
 
-class Sim {
-  private timer: ReturnType<typeof setInterval> | null = null;
+class SocketManager {
+  private ws: WebSocket | null = null;
   private listeners = new Set<Listener>();
   private statusListeners = new Set<(running: boolean) => void>();
-  private t = 0;
-  // Drift state — slowly degrades to make the dashboard interesting
-  private drift = 0;
+  private isRunning = false;
+  private isOffline = true;
+  private backendUrl = "ws://localhost:3001";
+  private serverStatusListeners = new Set<(offline: boolean) => void>();
 
-  isRunning() {
-    return this.timer !== null;
+  constructor() {
+    this.connect();
+    this.checkApi();
+  }
+
+  private async checkApi() {
+    try {
+      const res = await fetch("http://localhost:3001/api/status");
+      if (res.ok) {
+        this.isOffline = false;
+        this.serverStatusListeners.forEach(f => f(false));
+      }
+    } catch (e) {
+      this.isOffline = true;
+      this.serverStatusListeners.forEach(f => f(true));
+    }
+    setTimeout(() => this.checkApi(), 5000);
+  }
+
+  private connect() {
+    try {
+      this.ws = new WebSocket(this.backendUrl);
+
+      this.ws.onmessage = (event) => {
+        const data = JSON.parse(event.data) as SensorPayload;
+        
+        // Update operational status
+        const running = data.status === "RUNNING";
+        if (this.isRunning !== running) {
+          this.isRunning = running;
+          this.statusListeners.forEach(f => f(running));
+        }
+
+        this.listeners.forEach(f => f(data));
+      };
+
+      this.ws.onclose = () => {
+        console.warn("Backend WebSocket closed. Retrying...");
+        setTimeout(() => this.connect(), 2000);
+      };
+
+      this.ws.onerror = () => {
+        this.statusListeners.forEach(f => f(false));
+      };
+    } catch (e) {
+      console.error("Socket connection failed:", e);
+    }
   }
 
   onData(fn: Listener) {
@@ -56,102 +105,42 @@ class Sim {
 
   onStatus(fn: (running: boolean) => void) {
     this.statusListeners.add(fn);
-    fn(this.isRunning());
+    fn(this.isRunning);
     return () => this.statusListeners.delete(fn);
   }
 
-  start() {
-    if (this.timer) return;
-    this.t = 0;
-    this.drift = 0;
-    this.timer = setInterval(() => this.tick(), 1000);
-    this.statusListeners.forEach((f) => f(true));
+  onServerStatus(fn: (offline: boolean) => void) {
+    this.serverStatusListeners.add(fn);
+    fn(this.isOffline);
+    return () => this.serverStatusListeners.delete(fn);
   }
 
-  stop() {
-    if (!this.timer) return;
-    clearInterval(this.timer);
-    this.timer = null;
-    this.statusListeners.forEach((f) => f(false));
+  async start() {
+    try {
+      await fetch("http://localhost:3001/api/start", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to start backend:", e);
+    }
   }
 
-  private tick() {
-    this.t += 1;
-    // Gentle, occasionally spiky synthetic signals
-    const noise = (a: number) => (Math.random() - 0.5) * a;
-    // After ~25s, slowly degrade
-    if (this.t > 25) this.drift += 0.05;
-
-    const ambientTemp = 28 + Math.sin(this.t / 30) * 1.5 + noise(0.4);
-    const oilTemp =
-      ambientTemp +
-      6 +
-      Math.sin(this.t / 12) * 1.2 +
-      this.drift * 0.6 +
-      noise(0.5);
-    const flow = Math.max(
-      0,
-      3.6 - this.drift * 0.04 + Math.sin(this.t / 18) * 0.25 + noise(0.15),
-    );
-    const vibration = Math.max(
-      0,
-      0.06 + this.drift * 0.012 + Math.abs(Math.sin(this.t / 7)) * 0.05 + noise(0.04),
-    );
-    const tempDiff = oilTemp - ambientTemp;
-
-    // Health index: weighted from each metric
-    const flowScore = clamp01((flow - 1.5) / 2.5) * 100;
-    const vibScore = clamp01(1 - vibration / 0.6) * 100;
-    const diffScore = clamp01(1 - (tempDiff - 5) / 20) * 100;
-    const healthIndex = Math.round(
-      flowScore * 0.3 + vibScore * 0.4 + diffScore * 0.3,
-    );
-
-    const alerts: AlertCode[] = [];
-    if (flow < THRESH.flowMin) alerts.push("LOW_FLOW");
-    if (vibration > THRESH.vibrationMax) alerts.push("HIGH_VIBRATION");
-    if (tempDiff > THRESH.tempDiffMax) alerts.push("HIGH_TEMP_DIFF");
-    if (healthIndex < THRESH.healthMin) alerts.push("LOW_HEALTH");
-
-    const vibState: MlState =
-      vibration > 0.3 ? "CRITICAL" : vibration > 0.18 ? "WARNING" : "NORMAL";
-    const tempState: MlState =
-      tempDiff > 16 ? "CRITICAL" : tempDiff > 12 ? "WARNING" : "NORMAL";
-    const failure = vibState === "CRITICAL" && tempState !== "NORMAL";
-    if (failure) alerts.push("ML_FAILURE_PREDICTED");
-
-    const payload: SensorPayload = {
-      oilTemp: round(oilTemp, 2),
-      ambientTemp: round(ambientTemp, 2),
-      flow: round(flow, 2),
-      vibration: round(vibration, 3),
-      tempDiff: round(tempDiff, 2),
-      healthIndex,
-      alerts,
-      mlPrediction: { vibration: vibState, temperature: tempState, failure },
-      ts: Date.now(),
-    };
-
-    this.listeners.forEach((f) => f(payload));
+  async stop() {
+    try {
+      await fetch("http://localhost:3001/api/stop", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to stop backend:", e);
+    }
   }
 }
 
-function clamp01(n: number) {
-  return Math.max(0, Math.min(1, n));
-}
-function round(n: number, d: number) {
-  const p = 10 ** d;
-  return Math.round(n * p) / p;
-}
-
-export const sim = new Sim();
+export const sim = new SocketManager();
 
 export const ALERT_LABEL: Record<AlertCode, string> = {
   LOW_FLOW: "Low oil flow rate",
   HIGH_VIBRATION: "High vibration",
   HIGH_TEMP_DIFF: "High oil-ambient ΔT",
   LOW_HEALTH: "Health index low",
-  ML_FAILURE_PREDICTED: "ML: failure imminent",
+  CRITICAL_TEMPERATURE: "Critical oil temp",
+  ML_FAILURE_PREDICTED: "ML: failure predicted",
 };
 
 export const ALERT_SEVERITY: Record<AlertCode, "warning" | "critical"> = {
@@ -159,7 +148,9 @@ export const ALERT_SEVERITY: Record<AlertCode, "warning" | "critical"> = {
   HIGH_VIBRATION: "warning",
   HIGH_TEMP_DIFF: "warning",
   LOW_HEALTH: "warning",
+  CRITICAL_TEMPERATURE: "critical",
   ML_FAILURE_PREDICTED: "critical",
 };
 
 export { THRESH };
+
