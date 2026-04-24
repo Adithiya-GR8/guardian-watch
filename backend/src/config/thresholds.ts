@@ -9,7 +9,7 @@ export const THRESHOLDS = {
 };
 
 export const SERIAL_CONFIG = {
-  baudRate: 9600,
+  baudRate: 115200,
   autoReconnectInterval: 5000,
   // IMPORTANT: On Windows, check Device Manager or Arduino IDE for your port (e.g., COM3, COM4)
   port: process.env.SERIAL_PORT || "COM3" 

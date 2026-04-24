@@ -132,12 +132,48 @@ class SerialService extends EventEmitter {
     }
   }
 
+  private currentBuffer: Partial<SerialData> = {};
+
   private parseData(line: string): void {
     try {
-      const flowMatch = line.match(/Flow\s*\(.*?\):\s*([\d.]+)/i);
-      const oilMatch = line.match(/Temp\s*\(.*?\):\s*([\d.]+)/i);
-      const vibMatch = line.match(/Vibration\s*\(.*?\):\s*([\d.]+)/i);
-      const ambMatch = line.match(/Ambient\s*\(.*?\):\s*([\d.]+)/i);
+      const l = line.trim();
+      
+      // 1. Handle Multi-line Block Format (New Sketch)
+      if (l === "------ DATA ------") {
+        this.currentBuffer = {};
+        return;
+      }
+      
+      if (l.startsWith("---")) { // footer
+        if (this.currentBuffer.flow !== undefined && this.currentBuffer.oilTemp !== undefined) {
+          const payload: SerialData = {
+            flow: this.currentBuffer.flow,
+            oilTemp: this.currentBuffer.oilTemp,
+            vibration: this.currentBuffer.vibration || 0,
+            ambientTemp: this.currentBuffer.ambientTemp,
+            raw: line
+          };
+          this.emit("data", payload);
+        }
+        return;
+      }
+
+      // Extract values from individual lines (New Format)
+      const vibMatchNew = l.match(/Vibration RMS:\s*([\d.]+)/i);
+      const flowMatchNew = l.match(/Flow Rate:\s*([\d.]+)/i);
+      const dsTempMatch = l.match(/DS18B20 Temp:\s*([\d.]+)/i);
+      const dhtTempMatch = l.match(/DHT Temp:\s*([\d.]+)/i);
+      
+      if (vibMatchNew) this.currentBuffer.vibration = parseFloat(vibMatchNew[1]);
+      if (flowMatchNew) this.currentBuffer.flow = parseFloat(flowMatchNew[1]);
+      if (dsTempMatch) this.currentBuffer.oilTemp = parseFloat(dsTempMatch[1]);
+      if (dhtTempMatch) this.currentBuffer.ambientTemp = parseFloat(dhtTempMatch[1]);
+
+      // 2. Handle Single-line Format (Simulator and Old Sketch)
+      const flowMatch = l.match(/Flow\s*\(.*?\):\s*([\d.]+)/i);
+      const oilMatch = l.match(/Temp\s*\(.*?\):\s*([\d.]+)/i);
+      const vibMatch = l.match(/Vibration\s*\(.*?\):\s*([\d.]+)/i);
+      const ambMatch = l.match(/Ambient\s*\(.*?\):\s*([\d.]+)/i);
 
       if (flowMatch && oilMatch && vibMatch) {
         const payload: SerialData = {

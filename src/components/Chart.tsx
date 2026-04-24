@@ -44,8 +44,8 @@ export function Chart({
           {unit && <span className="ml-1 text-muted-foreground">{unit}</span>}
         </div>
       </div>
-      <div className="mt-3 h-40 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="mt-3 h-40 w-full min-h-[160px]">
+        <ResponsiveContainer width="100%" height="100%" minHeight={160}>
           <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">

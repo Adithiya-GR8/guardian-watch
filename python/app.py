@@ -27,21 +27,29 @@ state = {
 @app.on_event("startup")
 async def startup_event():
     try:
-        if not os.path.exists(TEMP_MODEL_PATH):
-            print(f"⚠️  MISSING: Temperature model at {TEMP_MODEL_PATH}")
-        else:
+        # Load Temperature Model
+        if os.path.exists(TEMP_MODEL_PATH):
             state["temp_model"] = joblib.load(TEMP_MODEL_PATH)
             state["temp_scaler"] = joblib.load(TEMP_SCALER_PATH)
-            
-        if not os.path.exists(VIB_MODEL_PATH):
-            print(f"⚠️  MISSING: Vibration model at {VIB_MODEL_PATH}")
+            print(f"LOADED: Temperature model from {TEMP_MODEL_PATH}")
         else:
-            state["vib_model"] = tf.keras.models.load_model(VIB_MODEL_PATH)
-            state["vib_scaler"] = joblib.load(VIB_SCALER_PATH)
+            print(f"MISSING: Temperature model at {TEMP_MODEL_PATH}")
+            
+        # Load Vibration Model
+        if os.path.exists(VIB_MODEL_PATH):
+            try:
+                # Sometimes models saved with older Keras versions need compile=False
+                state["vib_model"] = tf.keras.models.load_model(VIB_MODEL_PATH, compile=False)
+                state["vib_scaler"] = joblib.load(VIB_SCALER_PATH)
+                print(f"LOADED: Vibration model from {VIB_MODEL_PATH}")
+            except Exception as e:
+                print(f"FAILED: Could not load vibration model: {e}")
+        else:
+            print(f"MISSING: Vibration model at {VIB_MODEL_PATH}")
         
-        print("✅ Python ML Service ready at http://127.0.0.1:8000")
+        print("ML Service initialization complete")
     except Exception as e:
-        print(f"❌ Error loading models: {e}")
+        print(f"CRITICAL: Error during startup: {e}")
 
 class TempRequest(BaseModel):
     # The temperature model needs a small window to calculate features
@@ -90,9 +98,12 @@ async def predict_vibration(req: VibRequest):
     try:
         w = np.array(req.samples)
         
-        # Consistent scaling: use the scaler fit during training
-        # Note: training used fit_transform on RAW signal
-        scaled_samples = state["vib_scaler"].transform(w.reshape(-1, 1)).flatten()
+        # Convert to DataFrame to avoid "X does not have valid feature names" warning/error
+        # Assuming the original feature name was 'Vibration' or just using a dummy name
+        df_w = pd.DataFrame(w, columns=['Vibration'])
+        
+        # Scaling consistently with training
+        scaled_samples = state["vib_scaler"].transform(df_w).flatten()
         
         # Re-calculate features on scaled samples: [mean, std, max, min, rms]
         w_s = scaled_samples
@@ -112,15 +123,16 @@ async def predict_vibration(req: VibRequest):
         mse = np.mean(np.power(X - reconstruction, 2))
         
         status = "NORMAL"
-        # Thresholds tuned for higher sensitivity
-        if mse > 0.005:   # Lowered from 0.05
+        if mse > 0.005:
             status = "FAILURE"
-        elif mse > 0.001: # Lowered from 0.02
+        elif mse > 0.001:
             status = "WARNING"
             
         print(f"DEBUG: Vib Prediction: {status} (MSE: {mse:.6f})")
         return {"status": status, "mse": float(mse)}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"ERROR: Vibration prediction failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -137,5 +149,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     # Use 127.0.0.1 explicitly to match the Node.js backend expectation
-    print("🚀 Starting Guardian Watch ML Service...")
+    print("Starting Guardian Watch ML Service...")
     uvicorn.run(app, host="127.0.0.1", port=8000)

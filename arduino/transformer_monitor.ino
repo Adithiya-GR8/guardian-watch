@@ -1,117 +1,128 @@
-/**
- * GUARDIAN WATCH - Transformer Health Monitor
- * Complete Sensor Sketch for Arduino Uno
- * 
- * SENSOR CONNECTIONS:
- * -------------------
- * Flow Sensor (YF-S201):    Digital Pin 2 (Interrupt)
- * Oil Temp (DS18B20):       Digital Pin 3 (Data) + 4.7k resistor
- * Ambient Temp (DS18B20):   Digital Pin 4 (Data) + 4.7k resistor
- * Vibration (MPU6050):      I2C (SDA -> A4, SCL -> A5)
- */
-
 #include <Wire.h>
+#include <MPU6050.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <MPU6050.h>
-#include <math.h>
+#include <DHT.h>
 
-// ================= FLOW SENSOR =================
-#define FLOW_PIN 2
+/**
+ * UPDATED SKETCH - Guardian Watch
+ * Optimized for sensitivity and proper math.
+ */
+
+// MPU
+MPU6050 mpu;
+
+// FLOW SENSOR
 volatile int flowPulseCount = 0;
 float flowRate = 0;
 unsigned long lastFlowTime = 0;
 
-void flowISR() {
+// DS18B20
+#define ONE_WIRE_BUS 3
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature ds18b20(&oneWire);
+float tempDS = 0;
+
+// DHT22
+#define DHTPIN 4
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+float tempDHT = 0, humidity = 0;
+
+// Timing
+unsigned long lastTempRead = 0;
+unsigned long lastDHTRead = 0;
+
+// Vibration
+const int sampleCount = 100;
+float vibrationRMS = 0;
+
+void flowPulse() {
   flowPulseCount++;
 }
 
-// ================= TEMPERATURE SENSORS =================
-// Oil Temp on Pin 3
-#define OIL_TEMP_PIN 3
-OneWire oneWireOil(OIL_TEMP_PIN);
-DallasTemperature oilTempSensor(&oneWireOil);
-
-// Ambient Temp on Pin 4
-#define AMB_TEMP_PIN 4
-OneWire oneWireAmb(AMB_TEMP_PIN);
-DallasTemperature ambTempSensor(&oneWireAmb);
-
-// ================= MPU6050 VIBRATION =================
-MPU6050 mpu;
-int16_t ax, ay, az;
-float prevMagnitude = 0;
-float vibration = 0;
-
 void setup() {
-  Serial.begin(9600);
-
-  // Flow sensor setup
-  pinMode(FLOW_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(FLOW_PIN), flowISR, RISING);
-
-  // Temperature sensors setup
-  oilTempSensor.begin();
-  ambTempSensor.begin();
-
-  // MPU6050 I2C setup
+  Serial.begin(115200);
   Wire.begin();
-  mpu.initialize();
 
+  mpu.initialize();
   if (!mpu.testConnection()) {
-    // Note: If this fails, make sure A4 and A5 are connected
-    Serial.println("MPU6050 Connection Failed!");
+    Serial.println("MPU failed!");
+    while (1);
   }
 
-  Serial.println("System Ready - Starting Telemetry...");
+  pinMode(2, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(2), flowPulse, RISING);
+
+  ds18b20.begin();
+  dht.begin();
+
+  Serial.println("System Ready");
 }
 
 void loop() {
-  // ---------- 1. CALCULATE FLOW ----------
-  if (millis() - lastFlowTime >= 1000) {
-    detachInterrupt(digitalPinToInterrupt(FLOW_PIN));
-    flowRate = flowPulseCount / 7.5; // YF-S201 formula (L/min)
-    flowPulseCount = 0;
-    lastFlowTime = millis();
-    attachInterrupt(digitalPinToInterrupt(FLOW_PIN), flowISR, RISING);
+
+  // ========= VIBRATION (PRIORITY) =========
+  float sumSquares = 0;
+
+  for (int i = 0; i < sampleCount; i++) {
+    int16_t rawAx, rawAy, rawAz;
+    mpu.getAcceleration(&rawAx, &rawAy, &rawAz);
+
+    float ax = (rawAx / 16384.0) * 9.81;
+    float ay = (rawAy / 16384.0) * 9.81;
+    float az = (rawAz / 16384.0) * 9.81;
+
+    float magnitude = sqrt(ax * ax + ay * ay + az * az);
+    float vibration = magnitude - 9.81;
+
+    sumSquares += vibration * vibration;
+
+    delay(5);  // keep stable sampling
   }
 
-  // ---------- 2. READ TEMPERATURES ----------
-  oilTempSensor.requestTemperatures();
-  float oilTemp = oilTempSensor.getTempCByIndex(0);
+  vibrationRMS = sqrt(sumSquares / sampleCount);
 
-  ambTempSensor.requestTemperatures();
-  float ambTemp = ambTempSensor.getTempCByIndex(0);
+  // ========= FLOW =========
+  if (millis() - lastFlowTime >= 1000) {
+    flowRate = flowPulseCount / 7.5;
+    flowPulseCount = 0;
+    lastFlowTime = millis();
+  }
 
-  // ---------- 3. CALCULATE VIBRATION ----------
-  mpu.getAcceleration(&ax, &ay, &az);
-  float ax_g = ax / 16384.0;
-  float ay_g = ay / 16384.0;
-  float az_g = az / 16384.0;
-  
-  float magnitude = sqrt(ax_g * ax_g + ay_g * ay_g + az_g * az_g);
-  magnitude = abs(magnitude - 1.0); // Remove gravity offset
-  
-  vibration = abs(magnitude - prevMagnitude);
-  prevMagnitude = magnitude;
+  // ========= DS18B20 (every 2 sec) =========
+  if (millis() - lastTempRead >= 2000) {
+    ds18b20.requestTemperatures();
+    tempDS = ds18b20.getTempCByIndex(0);
+    lastTempRead = millis();
+  }
 
-  // ---------- 4. OUTPUT TO SERIAL (CRITICAL FORMAT) ----------
-  // Format required by Node.js backend:
-  // Flow (L/min): X | Temp (C): X | Vibration (g): X | Ambient (C): X
-  
-  Serial.print("Flow (L/min): ");
-  Serial.print(flowRate);
+  // ========= DHT22 (every 2 sec) =========
+  if (millis() - lastDHTRead >= 2000) {
+    tempDHT = dht.readTemperature();
+    humidity = dht.readHumidity();
+    lastDHTRead = millis();
+  }
 
-  Serial.print(" | Temp (C): ");
-  Serial.print(oilTemp);
+  // ========= OUTPUT =========
+  Serial.println("------ DATA ------");
 
-  Serial.print(" | Vibration (g): ");
-  Serial.print(vibration);
+  Serial.print("Vibration RMS: ");
+  Serial.println(vibrationRMS);
 
-  Serial.print(" | Ambient (C): ");
-  Serial.print(ambTemp);
+  Serial.print("Flow Rate: ");
+  Serial.println(flowRate);
 
-  Serial.println(); // Send the newline to complete the packet
+  Serial.print("DS18B20 Temp: ");
+  Serial.println(tempDS);
 
-  delay(500); // 2Hz Telemetry rate
+  Serial.print("DHT Temp: ");
+  Serial.println(tempDHT);
+
+  Serial.print("Humidity: ");
+  Serial.println(humidity);
+
+  Serial.println("------------------\n");
+
+  delay(300);
 }
