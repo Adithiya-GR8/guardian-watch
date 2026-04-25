@@ -175,14 +175,14 @@ class SerialService extends EventEmitter {
 
       // 2. Handle Single-line Format (Simulator and Old Sketch)
       const flowMatch = l.match(/Flow\s*\(.*?\):\s*([\d.]+)/i);
-      const oilMatch = l.match(/Temp\s*\(.*?\):\s*([\d.]+)/i);
+      const oilMatchSingle = l.match(/Temp\s*\(.*?\):\s*([\d.]+)/i);
       const vibMatch = l.match(/Vibration\s*\(.*?\):\s*([\d.]+)/i);
       const ambMatch = l.match(/Ambient\s*\(.*?\):\s*([\d.]+)/i);
 
-      if (flowMatch && oilMatch && vibMatch) {
+      if (flowMatch && oilMatchSingle && vibMatch) {
         const payload: SerialData = {
           flow: parseFloat(flowMatch[1]),
-          oilTemp: parseFloat(oilMatch[1]),
+          oilTemp: parseFloat(oilMatchSingle[1]),
           vibration: parseFloat(vibMatch[1]),
           ambientTemp: ambMatch ? parseFloat(ambMatch[1]) : undefined,
           raw: line
