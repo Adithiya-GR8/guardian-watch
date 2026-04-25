@@ -161,12 +161,16 @@ class SerialService extends EventEmitter {
       // Extract values from individual lines (New Format)
       const vibMatchNew = l.match(/Vibration RMS:\s*([\d.]+)/i);
       const flowMatchNew = l.match(/Flow Rate:\s*([\d.]+)/i);
-      const dsTempMatch = l.match(/DS18B20 Temp:\s*([\d.]+)/i);
-      const dhtTempMatch = l.match(/DHT Temp:\s*([\d.]+)/i);
+      const oilMatch = l.match(/Oil Temp:\s*([\d.]+)/i);
+      const dsTempMatch = l.match(/DS18B20 Temp:\s*([\d.]+)/i); // Fallback
+      const atmMatch = l.match(/Atmospheric Temp:\s*([\d.]+)/i);
+      const dhtTempMatch = l.match(/DHT Temp:\s*([\d.]+)/i); // Fallback
       
       if (vibMatchNew) this.currentBuffer.vibration = parseFloat(vibMatchNew[1]);
       if (flowMatchNew) this.currentBuffer.flow = parseFloat(flowMatchNew[1]);
+      if (oilMatch) this.currentBuffer.oilTemp = parseFloat(oilMatch[1]);
       if (dsTempMatch) this.currentBuffer.oilTemp = parseFloat(dsTempMatch[1]);
+      if (atmMatch) this.currentBuffer.ambientTemp = parseFloat(atmMatch[1]);
       if (dhtTempMatch) this.currentBuffer.ambientTemp = parseFloat(dhtTempMatch[1]);
 
       // 2. Handle Single-line Format (Simulator and Old Sketch)

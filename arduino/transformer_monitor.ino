@@ -2,11 +2,11 @@
 #include <MPU6050.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <DHT.h>
 
 /**
  * UPDATED SKETCH - Guardian Watch
- * Optimized for sensitivity and proper math.
+ * DHT22 replaced with LM35 for Atmospheric monitoring.
+ * Re-mapped to support Oil Temp and Atmospheric Temp labels.
  */
 
 // MPU
@@ -23,15 +23,13 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature ds18b20(&oneWire);
 float tempDS = 0;
 
-// DHT22
-#define DHTPIN 4
-#define DHTTYPE DHT22
-DHT dht(DHTPIN, DHTTYPE);
-float tempDHT = 0, humidity = 0;
+// LM35
+#define LM35_PIN A0
+float tempLM35 = 0;
 
 // Timing
 unsigned long lastTempRead = 0;
-unsigned long lastDHTRead = 0;
+unsigned long lastLM35Read = 0;
 
 // Vibration
 const int sampleCount = 100;
@@ -45,24 +43,29 @@ void setup() {
   Serial.begin(115200);
   Wire.begin();
 
+  // MPU setup
   mpu.initialize();
   if (!mpu.testConnection()) {
     Serial.println("MPU failed!");
     while (1);
   }
 
+  // Flow sensor interrupt
   pinMode(2, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(2), flowPulse, RISING);
 
+  // DS18B20
   ds18b20.begin();
-  dht.begin();
+
+  // LM35 pin
+  pinMode(LM35_PIN, INPUT);
 
   Serial.println("System Ready");
 }
 
 void loop() {
 
-  // ========= VIBRATION (PRIORITY) =========
+  // ========= VIBRATION =========
   float sumSquares = 0;
 
   for (int i = 0; i < sampleCount; i++) {
@@ -78,7 +81,7 @@ void loop() {
 
     sumSquares += vibration * vibration;
 
-    delay(5);  // keep stable sampling
+    delay(5);
   }
 
   vibrationRMS = sqrt(sumSquares / sampleCount);
@@ -90,18 +93,21 @@ void loop() {
     lastFlowTime = millis();
   }
 
-  // ========= DS18B20 (every 2 sec) =========
+  // ========= DS18B20 =========
   if (millis() - lastTempRead >= 2000) {
     ds18b20.requestTemperatures();
     tempDS = ds18b20.getTempCByIndex(0);
     lastTempRead = millis();
   }
 
-  // ========= DHT22 (every 2 sec) =========
-  if (millis() - lastDHTRead >= 2000) {
-    tempDHT = dht.readTemperature();
-    humidity = dht.readHumidity();
-    lastDHTRead = millis();
+  // ========= LM35 =========
+  if (millis() - lastLM35Read >= 2000) {
+    int sensorValue = analogRead(LM35_PIN);
+
+    float voltage = sensorValue * (5.0 / 1023.0);
+    tempLM35 = voltage * 100.0;
+
+    lastLM35Read = millis();
   }
 
   // ========= OUTPUT =========
@@ -113,14 +119,11 @@ void loop() {
   Serial.print("Flow Rate: ");
   Serial.println(flowRate);
 
-  Serial.print("DS18B20 Temp: ");
+  Serial.print("Oil Temp: ");
   Serial.println(tempDS);
 
-  Serial.print("DHT Temp: ");
-  Serial.println(tempDHT);
-
-  Serial.print("Humidity: ");
-  Serial.println(humidity);
+  Serial.print("Atmospheric Temp: ");
+  Serial.println(tempLM35);
 
   Serial.println("------------------\n");
 
