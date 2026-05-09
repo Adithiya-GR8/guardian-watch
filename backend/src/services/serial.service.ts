@@ -138,8 +138,8 @@ class SerialService extends EventEmitter {
     try {
       const l = line.trim();
       
-      // 1. Handle Multi-line Block Format (New Sketch)
-      if (l === "------ DATA ------") {
+      // 1. Handle Multi-line Block Format
+      if (l === "------ DATA ------" || l === "------ GUARDIAN DATA ------") {
         this.currentBuffer = {};
         return;
       }
@@ -158,20 +158,16 @@ class SerialService extends EventEmitter {
         return;
       }
 
-      // Extract values from individual lines (New Format)
-      const vibMatchNew = l.match(/Vibration RMS:\s*([\d.]+)/i);
-      const flowMatchNew = l.match(/Flow Rate:\s*([\d.]+)/i);
-      const oilMatch = l.match(/Oil Temp:\s*([\d.]+)/i);
-      const dsTempMatch = l.match(/DS18B20 Temp:\s*([\d.]+)/i); // Fallback
-      const atmMatch = l.match(/Atmospheric Temp:\s*([\d.]+)/i);
-      const dhtTempMatch = l.match(/DHT Temp:\s*([\d.]+)/i); // Fallback
+      // Extract values with flexible whitespace handling
+      const vibMatchNew = l.match(/Vibration\s*RMS:\s*([\d.]+)/i);
+      const flowMatchNew = l.match(/Flow\s*Rate:\s*([\d.]+)/i);
+      const oilMatch = l.match(/Oil\s*Temp:\s*([\d.]+)/i);
+      const atmMatch = l.match(/(?:Atmos|Atmospheric)\s*Temp:\s*([\d.]+)/i);
       
       if (vibMatchNew) this.currentBuffer.vibration = parseFloat(vibMatchNew[1]);
       if (flowMatchNew) this.currentBuffer.flow = parseFloat(flowMatchNew[1]);
       if (oilMatch) this.currentBuffer.oilTemp = parseFloat(oilMatch[1]);
-      if (dsTempMatch) this.currentBuffer.oilTemp = parseFloat(dsTempMatch[1]);
       if (atmMatch) this.currentBuffer.ambientTemp = parseFloat(atmMatch[1]);
-      if (dhtTempMatch) this.currentBuffer.ambientTemp = parseFloat(dhtTempMatch[1]);
 
       // 2. Handle Single-line Format (Simulator and Old Sketch)
       const flowMatch = l.match(/Flow\s*\(.*?\):\s*([\d.]+)/i);

@@ -138,7 +138,7 @@ export const sim = new SocketManager();
 export const ALERT_LABEL: Record<AlertCode, string> = {
   LOW_FLOW: "Low oil flow rate",
   HIGH_VIBRATION: "High vibration",
-  HIGH_TEMP_DIFF: "High oil-ambient ΔT",
+  HIGH_TEMP_DIFF: "High oil-atmos ΔT",
   LOW_HEALTH: "Health index low",
   CRITICAL_TEMPERATURE: "Critical oil temp",
   ML_FAILURE_PREDICTED: "ML: failure predicted",

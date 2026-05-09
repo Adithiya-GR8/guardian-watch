@@ -211,12 +211,12 @@ function Dashboard() {
             status={oilStatus}
           />
           <MetricCard
-            label="Ambient"
+            label="Atmospheric Temp"
             value={latest?.ambientTemp ?? 0}
             unit="°C"
           />
           <MetricCard
-            label="ΔT (Oil − Amb)"
+            label="ΔT (Oil − Atmos)"
             value={latest?.tempDiff ?? 0}
             unit="°C"
             status={diffStatus}
@@ -230,7 +230,7 @@ function Dashboard() {
           <MetricCard
             label="Vibration"
             value={latest?.vibration ?? 0}
-            unit="g"
+            unit="m/s²"
             status={vibStatus}
             precision={3}
           />
@@ -261,7 +261,7 @@ function Dashboard() {
             />
             <Chart
               title="Vibration"
-              unit="g"
+              unit="m/s²"
               data={vibSeries}
               color="--chart-3"
               precision={3}

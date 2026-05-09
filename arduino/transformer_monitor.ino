@@ -4,9 +4,8 @@
 #include <DallasTemperature.h>
 
 /**
- * UPDATED SKETCH - Guardian Watch
- * DHT22 replaced with LM35 for Atmospheric monitoring.
- * Re-mapped to support Oil Temp and Atmospheric Temp labels.
+ * REFACTORED SKETCH - Guardian Watch
+ * Non-blocking vibration sampling to prevent system freeze.
  */
 
 // MPU
@@ -27,12 +26,16 @@ float tempDS = 0;
 #define LM35_PIN A0
 float tempLM35 = 0;
 
-// Timing
+// Timing & Control
 unsigned long lastTempRead = 0;
 unsigned long lastLM35Read = 0;
+unsigned long lastVibeSampleTime = 0;
+unsigned long lastSerialPrint = 0;
 
-// Vibration
+// Vibration Variables
 const int sampleCount = 100;
+int currentSamples = 0;
+float runningSumSquares = 0;
 float vibrationRMS = 0;
 
 void flowPulse() {
@@ -46,11 +49,11 @@ void setup() {
   // MPU setup
   mpu.initialize();
   if (!mpu.testConnection()) {
-    Serial.println("MPU failed!");
+    Serial.println("MPU connection failed! Check wiring.");
     while (1);
   }
 
-  // Flow sensor interrupt
+  // Flow sensor interrupt (Pin 2)
   pinMode(2, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(2), flowPulse, RISING);
 
@@ -60,72 +63,82 @@ void setup() {
   // LM35 pin
   pinMode(LM35_PIN, INPUT);
 
-  Serial.println("System Ready");
+  Serial.println("System Initialized...");
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
 
-  // ========= VIBRATION =========
-  float sumSquares = 0;
+  // ========= 1. VIBRATION SAMPLING (Non-Blocking) =========
+  // We collect 1 sample every 5ms until we reach 100 samples
+  if (currentSamples < sampleCount) {
+    if (currentMillis - lastVibeSampleTime >= 5) {
+      int16_t rawAx, rawAy, rawAz;
+      mpu.getAcceleration(&rawAx, &rawAy, &rawAz);
 
-  for (int i = 0; i < sampleCount; i++) {
-    int16_t rawAx, rawAy, rawAz;
-    mpu.getAcceleration(&rawAx, &rawAy, &rawAz);
+      // Convert raw to m/s^2 (Standard 2g scale: 16384 LSB/g)
+      float ax = (rawAx / 16384.0) * 9.81;
+      float ay = (rawAy / 16384.0) * 9.81;
+      float az = (rawAz / 16384.0) * 9.81;
 
-    float ax = (rawAx / 16384.0) * 9.81;
-    float ay = (rawAy / 16384.0) * 9.81;
-    float az = (rawAz / 16384.0) * 9.81;
+      // Calculate Magnitude and subtract Gravity (9.81)
+      float magnitude = sqrt(ax * ax + ay * ay + az * az);
+      float vibration = magnitude - 9.81;
 
-    float magnitude = sqrt(ax * ax + ay * ay + az * az);
-    float vibration = magnitude - 9.81;
-
-    sumSquares += vibration * vibration;
-
-    delay(5);
+      runningSumSquares += (vibration * vibration);
+      currentSamples++;
+      lastVibeSampleTime = currentMillis;
+    }
+  } else {
+    // 100 samples reached: Calculate Final RMS and Reset
+    vibrationRMS = sqrt(runningSumSquares / sampleCount);
+    runningSumSquares = 0;
+    currentSamples = 0;
   }
 
-  vibrationRMS = sqrt(sumSquares / sampleCount);
-
-  // ========= FLOW =========
-  if (millis() - lastFlowTime >= 1000) {
-    flowRate = flowPulseCount / 7.5;
+  // ========= 2. FLOW CALCULATION (Every 1s) =========
+  if (currentMillis - lastFlowTime >= 1000) {
+    flowRate = flowPulseCount / 7.5; // Standard YF-S201 factor
     flowPulseCount = 0;
-    lastFlowTime = millis();
+    lastFlowTime = currentMillis;
   }
 
-  // ========= DS18B20 =========
-  if (millis() - lastTempRead >= 2000) {
+  // ========= 3. DS18B20 OIL TEMP (Every 2s) =========
+  if (currentMillis - lastTempRead >= 2000) {
     ds18b20.requestTemperatures();
     tempDS = ds18b20.getTempCByIndex(0);
-    lastTempRead = millis();
+    lastTempRead = currentMillis;
   }
 
-  // ========= LM35 =========
-  if (millis() - lastLM35Read >= 2000) {
+  // ========= 4. LM35 ATMOSPHERIC TEMP (Every 2s) =========
+  if (currentMillis - lastLM35Read >= 2000) {
     int sensorValue = analogRead(LM35_PIN);
-
     float voltage = sensorValue * (5.0 / 1023.0);
     tempLM35 = voltage * 100.0;
-
-    lastLM35Read = millis();
+    lastLM35Read = currentMillis;
   }
 
-  // ========= OUTPUT =========
-  Serial.println("------ DATA ------");
+  // ========= 5. SERIAL OUTPUT (Every 500ms) =========
+  if (currentMillis - lastSerialPrint >= 500) {
+    Serial.println("------ GUARDIAN DATA ------");
+    
+    Serial.print("Vibration RMS: ");
+    Serial.print(vibrationRMS, 4); 
+    Serial.println(" m/s^2");
 
-  Serial.print("Vibration RMS: ");
-  Serial.println(vibrationRMS);
+    Serial.print("Flow Rate    : ");
+    Serial.print(flowRate);
+    Serial.println(" L/min");
 
-  Serial.print("Flow Rate: ");
-  Serial.println(flowRate);
+    Serial.print("Oil Temp     : ");
+    Serial.print(tempDS);
+    Serial.println(" C");
 
-  Serial.print("Oil Temp: ");
-  Serial.println(tempDS);
+    Serial.print("Atmos Temp   : ");
+    Serial.print(tempLM35);
+    Serial.println(" C");
 
-  Serial.print("Atmospheric Temp: ");
-  Serial.println(tempLM35);
-
-  Serial.println("------------------\n");
-
-  delay(300);
+    Serial.println("---------------------------\n");
+    lastSerialPrint = currentMillis;
+  }
 }
