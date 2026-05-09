@@ -94,14 +94,18 @@ function Dashboard() {
     }, 100);
   };
 
-  const oilStatus = !latest?.mlPrediction
+  const oilStatus = !latest
     ? "muted"
-    : latest.mlPrediction.temperature === "FAILURE"
+    : latest.oilTemp > THRESH.oilTempMax
       ? "crit"
-      : latest.mlPrediction.temperature === "WARNING"
+      : latest.oilTemp > THRESH.oilTempMax * 0.9 // Warn if near 41
         ? "warn"
-        : "ok";
-  const ambStatus = "ok" as const;
+        : latest.mlPrediction?.temperature === "FAILURE"
+          ? "crit"
+          : latest.mlPrediction?.temperature === "WARNING"
+            ? "warn"
+            : "ok";
+
   const diffStatus = !latest || latest.tempDiff === null
     ? "muted"
     : latest.tempDiff > THRESH.tempDiffMax
@@ -120,7 +124,7 @@ function Dashboard() {
     ? "muted"
     : latest.vibration > THRESH.vibrationMax
       ? "crit"
-      : latest.vibration > THRESH.vibrationMax * 0.7
+      : latest.vibration > THRESH.vibrationMax * 0.8 // Warn if near 4.0
         ? "warn"
         : "ok";
   const healthStatus = !latest
@@ -210,7 +214,6 @@ function Dashboard() {
             label="Ambient"
             value={latest?.ambientTemp ?? 0}
             unit="°C"
-            status={ambStatus}
           />
           <MetricCard
             label="ΔT (Oil − Amb)"

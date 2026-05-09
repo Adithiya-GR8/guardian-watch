@@ -35,7 +35,8 @@ type Listener = (p: SensorPayload) => void;
 
 const THRESH = {
   flowMin: 2.5,
-  vibrationMax: 0.20,
+  vibrationMax: 4.0,
+  oilTempMax: 41.0,
   tempDiffMax: 15.0,
   healthMin: 60,
 };

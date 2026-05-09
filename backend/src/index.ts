@@ -7,6 +7,7 @@ import { socketServer } from "./websocket/socket.js";
 import { serialService } from "./services/serial.service.js";
 import { dataProcessor } from "./services/dataProcessor.js";
 import { mlService } from "./services/ml.service.js";
+import { loggerService } from "./services/logger.service.js";
 
 dotenv.config();
 
@@ -55,6 +56,9 @@ serialService.on("data", async (serialData) => {
 
   // 4. Broadcast to all frontend clients
   socketServer.broadcast(finalPayload);
+
+  // 5. Log to CSV (Comment the line below to disable logging)
+  loggerService.log(finalPayload);
 });
 
 // Serial Connection Error Handler (for WebSocket updates)
@@ -85,7 +89,7 @@ serialService.on("connection", (connected) => {
 // Start Server
 server.listen(PORT, () => {
   console.log(`
-🚀 Guardian Watch Backend Running
+Guardian Watch Backend Running
 --------------------------------
 API: http://localhost:${PORT}/api
 WebSocket: ws://localhost:${PORT}

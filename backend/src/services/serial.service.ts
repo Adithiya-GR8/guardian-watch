@@ -85,7 +85,7 @@ class SerialService extends EventEmitter {
       // Normally stable data
       let flow = 3.5 + Math.sin(Date.now() / 5000) * 0.5 + (Math.random() * 0.1);
       let temp = 40.0 + Math.sin(Date.now() / 10000) * 5 + (Math.random() * 0.2);
-      let vibration = 0.02 + Math.abs(Math.sin(Date.now() / 2000)) * 0.05 + (Math.random() * 0.01);
+      let vibration = 3.0 + Math.sin(Date.now() / 2000) * 0.2 + (Math.random() * 0.05);
       
       // Trigger Anomaly every 30 cycles (approx 30 seconds)
       // Cycle 30-40 will be CRITICAL
@@ -94,7 +94,7 @@ class SerialService extends EventEmitter {
       if (isAnomaly) {
         // Sudden failure scenario: Low flow, high vibration, rising temp
         flow = 1.2 + (Math.random() * 0.3); // Critical (< 2.5)
-        vibration = 0.3 + (Math.random() * 0.2); // Critical (> 0.2)
+        vibration = 4.0 + (Math.random() * 0.5); // Critical (> 3.5)
         temp = 68.0 + (Math.random() * 5); // Critical (> 65)
       }
       

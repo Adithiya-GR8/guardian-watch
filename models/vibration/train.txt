@@ -8,6 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, LSTM, RepeatVector, Dense
 import joblib
+import pandas as pd # Added for percentile calculation and potentially easier thresholding
 
 # ==========================================
 # LOAD ALL MAT FILES (FIXED FOR PADERBORN)
@@ -17,7 +18,7 @@ def extract_signal_from_file(file_path):
         data = loadmat(file_path)
         key = [k for k in data.keys() if not k.startswith("__")][0]
         obj = data[key][0][0]
-        
+
         Y = obj['Y'][0]
         for item in Y:
             try:
@@ -58,6 +59,9 @@ signal = np.concatenate([signal1, signal2])
 DOWNSAMPLE_FACTOR = 100
 signal = signal[::DOWNSAMPLE_FACTOR]
 scaler = MinMaxScaler()
+# Store the original min and max values before scaling if needed for threshold mapping
+original_min = np.min(signal)
+original_max = np.max(signal)
 signal = scaler.fit_transform(signal.reshape(-1,1)).flatten()
 
 WINDOW_SIZE = 50
@@ -65,10 +69,19 @@ STEP_SIZE = 10
 
 def create_features(data):
     windows = [data[i:i+WINDOW_SIZE] for i in range(0, len(data) - WINDOW_SIZE, STEP_SIZE)]
+    # Ensure there are windows to create features from
+    if not windows:
+        return np.array([])
+    # Features: mean, std, max, min, RMS
     feats = [[np.mean(w), np.std(w), np.max(w), np.min(w), np.sqrt(np.mean(w**2))] for w in windows]
     return np.array(feats)
 
 X_features = create_features(signal)
+
+# Handle cases where X_features might be empty
+if X_features.size == 0:
+    raise ValueError("❌ No features created. Check signal length and window/step sizes.")
+
 X = X_features.reshape(X_features.shape[0], 1, X_features.shape[1])
 
 # ==========================================
@@ -85,11 +98,170 @@ outputs = Dense(num_features)(decoded)
 model = Model(inputs, outputs)
 model.compile(optimizer='adam', loss='mse')
 
-# ==========================================
-# TRAIN AND SAVE
-# ==========================================
-model.fit(X, X, epochs=15, batch_size=32, validation_split=0.1, verbose=1)
+# Calculate reconstruction errors on the training data to determine threshold
+X_pred = model.predict(X)
+X_reshaped = X.reshape(X.shape[0], X.shape[2])
+X_pred_reshaped = X_pred.reshape(X_pred.shape[0], X_pred.shape[2])
+train_errors = np.mean(np.abs(X_reshaped - X_pred_reshaped), axis=1)
+ANOMALY_THRESHOLD = np.percentile(train_errors, 98) # 98th percentile for more robustness
 
-model.save("vibration_model.h5")
-joblib.dump(scaler, "scaler.pkl")
-print("✅ MODEL TRAINED AND SAVED")
+model.save("vibration_model.h5") 
+joblib.dump(scaler, "scaler.pkl") 
+joblib.dump(ANOMALY_THRESHOLD, "vibration_threshold.pkl")
+
+print("MODEL TRAINED AND SAVED")
+print(f"ANOMALY THRESHOLD SAVED: {ANOMALY_THRESHOLD:.4f}")
+
+# ==========================================
+# ANOMALY DETECTION AND THRESHOLDING
+# ==========================================
+# Calculate reconstruction errors on the training data
+X_pred = model.predict(X)
+# Reshape X_pred and X for error calculation
+X_reshaped = X.reshape(X.shape[0], X.shape[2])
+X_pred_reshaped = X_pred.reshape(X_pred.shape[0], X_pred.shape[2])
+
+# Calculate Mean Absolute Error for each data point
+errors = np.mean(np.abs(X_reshaped - X_pred_reshaped), axis=1)
+
+# Determine an anomaly threshold (e.g., 95th percentile of training errors)
+# The user mentioned "normal vibration is around 3.00" and "critical vibration will cross 4.00".
+# To map these raw values to an anomaly threshold, we would need to:
+# 1. Understand the full range of the original vibration data.
+# 2. Scale 3.00 and 4.00 using the same scaler to get scaled vibration values.
+# 3. Create features from these scaled values (using create_features function).
+# 4. Feed these features into the autoencoder to get reconstruction errors.
+# 5. Set the threshold based on the reconstruction error corresponding to 4.00.
+# Without this mapping, we use a statistical threshold from the training data.
+
+# For demonstration, we'll use the 95th percentile of training errors as the anomaly threshold.
+# This threshold indicates a significant deviation from the normal patterns seen during training.
+ANOMALY_THRESHOLD = np.percentile(errors, 95) # Using 95th percentile as a starting point for anomaly detection
+
+print(f"\n✅ Anomaly Threshold (95th percentile of training errors): {ANOMALY_THRESHOLD:.4f}")
+
+# Function to detect anomalies in new data
+def detect_anomalies(new_data_signal, trained_scaler, trained_model, window_size, step_size, anomaly_threshold):
+    # Scale the new signal using the trained scaler
+    scaled_new_signal = trained_scaler.transform(new_data_signal.reshape(-1, 1)).flatten()
+
+    # Create features from the scaled signal
+    new_X_features = create_features(scaled_new_signal)
+
+    if new_X_features.size == 0:
+        print("⚠️ Not enough data to create features for anomaly detection.")
+        return [], []
+
+    new_X = new_X_features.reshape(new_X_features.shape[0], 1, new_X_features.shape[1])
+
+    # Predict (reconstruct) the new features
+    new_X_pred = trained_model.predict(new_X)
+
+    # Reshape for error calculation
+    new_X_reshaped = new_X.reshape(new_X.shape[0], new_X.shape[2])
+    new_X_pred_reshaped = new_X_pred.reshape(new_X_pred.shape[0], new_X_pred.shape[2])
+
+    # Calculate reconstruction errors
+    new_errors = np.mean(np.abs(new_X_reshaped - new_X_pred_reshaped), axis=1)
+
+    # Identify anomalies
+    anomalies = new_errors > anomaly_threshold
+    return new_errors, anomalies
+
+# Example of how to use the anomaly detection function (using a portion of training data as "new" data)
+print("\n--- Example Anomaly Detection ---")
+# Let's simulate some 'new' data, potentially with an anomaly, for testing.
+# For simplicity, we'll use a portion of the existing 'signal' and add a synthetic spike.
+# In a real scenario, 'new_data_signal_raw' would come from new sensor readings.
+
+# To link to user's requested values (3.00 normal, 4.00 critical):
+# If original data ranges from, say, 0 to 5, then 3.00 is (3-0)/(5-0) = 0.6 scaled.
+# And 4.00 is (4-0)/(5-0) = 0.8 scaled.
+# If we had data known to represent these states, we could derive the threshold.
+# Since we don't, ANOMALY_THRESHOLD is based on normal data's error distribution.
+
+# Example: Simulate a new signal. For now, use a segment of existing data.
+# To demonstrate 'critical' levels, we would ideally need a signal with critical events.
+# For now, let's use a small segment of the training signal to show detection.
+simulated_new_signal_raw = signal[:WINDOW_SIZE*2] # Take first two windows for example
+# Introduce a synthetic anomaly by adding a spike (if the original signal allows for it to be outside trained norms)
+# This part is highly dependent on the nature of 'normal' data.
+# For a more robust test, we would need actual critical data.
+
+# To relate to raw values, we first need to inverse transform the features to get approximate raw values
+# or work directly with reconstruction error as a proxy for "deviation from normal".
+
+# Let's instead show how a *function* for real-time prediction would work:
+def predict_critical_vibration(latest_signal_window_raw, trained_scaler, trained_model, anomaly_threshold):
+    """
+    Predicts if the latest vibration data indicates a critical state.
+    Args:
+        latest_signal_window_raw (np.ndarray): A raw, unscaled vibration signal window.
+        trained_scaler (MinMaxScaler): The scaler fitted on training data.
+        trained_model (tf.keras.Model): The trained autoencoder model.
+        anomaly_threshold (float): The calculated anomaly threshold.
+    Returns:
+        bool: True if critical, False otherwise.
+        float: The reconstruction error for the given window.
+    """
+    if len(latest_signal_window_raw) < WINDOW_SIZE:
+        print("Error: Input signal window is too short to create features.")
+        return False, 0.0
+
+    # Scale the input signal window
+    scaled_window = trained_scaler.transform(latest_signal_window_raw.reshape(-1, 1)).flatten()
+
+    # Create features for the single window
+    # Note: create_features expects a longer data sequence to generate multiple windows.
+    # For a single window, we need to adapt it.
+    # We will just process the one window directly as features.
+    feats_for_prediction = np.array([
+        np.mean(scaled_window),
+        np.std(scaled_window),
+        np.max(scaled_window),
+        np.min(scaled_window),
+        np.sqrt(np.mean(scaled_window**2))
+    ]).reshape(1, 1, num_features) # Reshape to (1, 1, num_features) for the model
+
+    # Make prediction (reconstruction)
+    reconstruction = trained_model.predict(feats_for_prediction)
+
+    # Calculate reconstruction error
+    error = np.mean(np.abs(feats_for_prediction.reshape(num_features) - reconstruction.reshape(num_features)))
+
+    is_critical = error > anomaly_threshold
+    return is_critical, error
+
+# Demonstrate with a sample window from the training data (assuming it's 'normal')
+# Let's take a window from the original unscaled signal
+sample_raw_window = signal1[0:WINDOW_SIZE * DOWNSAMPLE_FACTOR][::DOWNSAMPLE_FACTOR] # Take first window from original signal before scaling
+
+print(f"\nSimulating prediction for a sample window (first {WINDOW_SIZE} points from K001 signal):")
+is_critical_sample, error_sample = predict_critical_vibration(
+    sample_raw_window,
+    scaler, # Use the trained scaler
+    model, # Use the trained model
+    ANOMALY_THRESHOLD
+)
+print(f"Reconstruction error for sample window: {error_sample:.4f}")
+if is_critical_sample:
+    print("Prediction: ⚠️ CRITICAL VIBRATION DETECTED!")
+else:
+    print("Prediction: ✅ Normal vibration.")
+
+# To address "normal vibration is around 3.00 so the model is supposed to find out if the vibration will cross 4.00"
+# This requires a clear mapping from the raw vibration amplitude to the features, and then to the reconstruction error.
+# For example, if we knew that a raw vibration of 4.00 (when scaled and featurized) consistently produced a reconstruction error
+# above a certain value, say 0.05, then we could set ANOMALY_THRESHOLD = 0.05.
+# Without examples of "critical" data with raw values, we must rely on statistical thresholds from "normal" data.
+# The current ANOMALY_THRESHOLD represents "unusual activity" compared to the training data.
+
+print("\nExplanation for user's vibration levels:")
+print("The autoencoder detects *anomalous patterns* in the vibration signal's features.")
+print(f"The `ANOMALY_THRESHOLD` of {ANOMALY_THRESHOLD:.4f} is derived from what the model considers 'normal' during training.")
+print("To directly link to raw vibration values like '3.00 normal' and '4.00 critical', we would need:")
+print("1. Data examples of signals exhibiting a raw vibration around 4.00 (critical state).")
+print("2. To process these examples through the same scaling and feature extraction.")
+print("3. To calculate their reconstruction errors using the trained autoencoder.")
+print("Then, the `ANOMALY_THRESHOLD` could be set to differentiate between reconstruction errors typical for 'normal' (around 3.00) and 'critical' (crossing 4.00) states.")
+print("Currently, the model predicts if the *pattern of features* in a new window deviates significantly from the patterns it learned as 'normal'.")

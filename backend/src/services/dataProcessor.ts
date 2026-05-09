@@ -47,15 +47,15 @@ class DataProcessor {
     }
 
     // Vibration penalty (Up to 35 points)
-    // Optimal is < 0.05. Above 0.2 is critical.
-    if (data.vibration > 0.05) {
-      penalty += Math.min(35, ((data.vibration - 0.05) / 0.15) * 35);
+    // Normal is around 3.0. Above 4.0 is critical.
+    if (data.vibration > 3.0) {
+      penalty += Math.min(35, ((data.vibration - 3.0) / 1.0) * 35);
     }
 
     // Temperature penalty (Up to 35 points)
-    // Optimal oil temp is < 50. Above 65 is critical.
-    if (data.oilTemp > 50) {
-      penalty += Math.min(35, ((data.oilTemp - 50) / 15) * 35);
+    // Normal oil temp is around 36. Above 41 is critical.
+    if (data.oilTemp > 36) {
+      penalty += Math.min(35, ((data.oilTemp - 36) / 5) * 35);
     }
 
     const healthIndex = Math.max(0, Math.round(100 - penalty));

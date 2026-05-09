@@ -31,9 +31,15 @@ class MlService {
 
     try {
       // The Python API expects raw samples and calculates features internally
+      // console.log(`Calling Vibration ML with ${this.vibBuffer.length} samples...`);
       const response = await axios.post(`${ML_CONFIG.baseUrl}/predict/vibration`, { 
         samples: this.vibBuffer 
       }, { timeout: 1000 });
+      
+      if (response.data.status !== "NORMAL") {
+        console.log(`ML Prediction: Vibration ${response.data.status} (MAE: ${response.data.value})`);
+      }
+      
       return response.data.status;
     } catch (error) {
       if (axios.isAxiosError(error) && error.code === "ECONNREFUSED") {

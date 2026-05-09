@@ -1,9 +1,9 @@
 export const THRESHOLDS = {
   flowMin: 2.5,          // L/min
   flowHigh: 10.0,        // L/min (unusual high flow)
-  vibrationMax: 0.20,    // g
+  vibrationMax: 4.0,     // g
   tempDiffMax: 15.0,     // Celsius
-  oilTempMax: 65.0,      // Celsius
+  oilTempMax: 41.0,      // Celsius
   healthLow: 60,         // Index / 100
   healthCritical: 40     // Index / 100
 };
