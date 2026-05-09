@@ -4,15 +4,15 @@
 #include <DallasTemperature.h>
 
 /**
- * REFACTORED SKETCH - Guardian Watch
- * Non-blocking vibration sampling to prevent system freeze.
+ * REFACTORED SKETCH - Guardian Watch V3
+ * Features: Non-blocking vibration sampling & Atomic flow count.
  */
 
 // MPU
 MPU6050 mpu;
 
-// FLOW SENSOR
-volatile int flowPulseCount = 0;
+// FLOW SENSOR - Must be volatile as it's used in interrupts
+volatile uint16_t flowPulseCount = 0; 
 float flowRate = 0;
 unsigned long lastFlowTime = 0;
 
@@ -38,6 +38,7 @@ int currentSamples = 0;
 float runningSumSquares = 0;
 float vibrationRMS = 0;
 
+// Interrupt Service Routine (ISR)
 void flowPulse() {
   flowPulseCount++;
 }
@@ -49,39 +50,35 @@ void setup() {
   // MPU setup
   mpu.initialize();
   if (!mpu.testConnection()) {
-    Serial.println("MPU connection failed! Check wiring.");
+    Serial.println("MPU connection failed!");
     while (1);
   }
 
-  // Flow sensor interrupt (Pin 2)
+  // Flow sensor setup (Pin 2)
   pinMode(2, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(2), flowPulse, RISING);
 
-  // DS18B20
+  // Temperature sensors
   ds18b20.begin();
-
-  // LM35 pin
   pinMode(LM35_PIN, INPUT);
 
-  Serial.println("System Initialized...");
+  Serial.println("Guardian Watch Online...");
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
   // ========= 1. VIBRATION SAMPLING (Non-Blocking) =========
-  // We collect 1 sample every 5ms until we reach 100 samples
   if (currentSamples < sampleCount) {
     if (currentMillis - lastVibeSampleTime >= 5) {
       int16_t rawAx, rawAy, rawAz;
       mpu.getAcceleration(&rawAx, &rawAy, &rawAz);
 
-      // Convert raw to m/s^2 (Standard 2g scale: 16384 LSB/g)
+      // Math: Convert to G then m/s^2
       float ax = (rawAx / 16384.0) * 9.81;
       float ay = (rawAy / 16384.0) * 9.81;
       float az = (rawAz / 16384.0) * 9.81;
 
-      // Calculate Magnitude and subtract Gravity (9.81)
       float magnitude = sqrt(ax * ax + ay * ay + az * az);
       float vibration = magnitude - 9.81;
 
@@ -90,27 +87,32 @@ void loop() {
       lastVibeSampleTime = currentMillis;
     }
   } else {
-    // 100 samples reached: Calculate Final RMS and Reset
     vibrationRMS = sqrt(runningSumSquares / sampleCount);
     runningSumSquares = 0;
     currentSamples = 0;
   }
 
-  // ========= 2. FLOW CALCULATION (Every 1s) =========
+  // ========= 2. FLOW CALCULATION (Atomic) =========
   if (currentMillis - lastFlowTime >= 1000) {
-    flowRate = flowPulseCount / 7.5; // Standard YF-S201 factor
+    // PROTECTED BLOCK: Briefly disable interrupts to grab the count
+    noInterrupts();
+    uint16_t pulses = flowPulseCount;
     flowPulseCount = 0;
+    interrupts();
+
+    // Standard conversion for YF-S201 (Pulses per second / 7.5)
+    flowRate = (float)pulses / 7.5; 
     lastFlowTime = currentMillis;
   }
 
-  // ========= 3. DS18B20 OIL TEMP (Every 2s) =========
+  // ========= 3. OIL TEMP (Every 2s) =========
   if (currentMillis - lastTempRead >= 2000) {
     ds18b20.requestTemperatures();
     tempDS = ds18b20.getTempCByIndex(0);
     lastTempRead = currentMillis;
   }
 
-  // ========= 4. LM35 ATMOSPHERIC TEMP (Every 2s) =========
+  // ========= 4. ATMOSPHERIC TEMP (Every 2s) =========
   if (currentMillis - lastLM35Read >= 2000) {
     int sensorValue = analogRead(LM35_PIN);
     float voltage = sensorValue * (5.0 / 1023.0);
@@ -120,25 +122,25 @@ void loop() {
 
   // ========= 5. SERIAL OUTPUT (Every 500ms) =========
   if (currentMillis - lastSerialPrint >= 500) {
-    Serial.println("------ GUARDIAN DATA ------");
+    Serial.println("--- SENSOR SUMMARY ---");
     
-    Serial.print("Vibration RMS: ");
-    Serial.print(vibrationRMS, 4); 
+    Serial.print("Vibe RMS: ");
+    Serial.print(vibrationRMS, 3);
     Serial.println(" m/s^2");
 
-    Serial.print("Flow Rate    : ");
-    Serial.print(flowRate);
+    Serial.print("Flow    : ");
+    Serial.print(flowRate, 2);
     Serial.println(" L/min");
 
-    Serial.print("Oil Temp     : ");
-    Serial.print(tempDS);
+    Serial.print("Oil Temp: ");
+    Serial.print(tempDS, 1);
     Serial.println(" C");
 
-    Serial.print("Atmos Temp   : ");
-    Serial.print(tempLM35);
+    Serial.print("Air Temp: ");
+    Serial.print(tempLM35, 1);
     Serial.println(" C");
 
-    Serial.println("---------------------------\n");
+    Serial.println("----------------------\n");
     lastSerialPrint = currentMillis;
   }
 }

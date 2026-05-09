@@ -139,12 +139,12 @@ class SerialService extends EventEmitter {
       const l = line.trim();
       
       // 1. Handle Multi-line Block Format
-      if (l === "------ DATA ------" || l === "------ GUARDIAN DATA ------") {
+      if (l === "------ DATA ------" || l === "------ GUARDIAN DATA ------" || l === "--- SENSOR SUMMARY ---") {
         this.currentBuffer = {};
         return;
       }
       
-      if (l.startsWith("---")) { // footer
+      if (l.startsWith("---") && !l.includes("SUMMARY")) { // footer
         if (this.currentBuffer.flow !== undefined && this.currentBuffer.oilTemp !== undefined) {
           const payload: SerialData = {
             flow: this.currentBuffer.flow,
@@ -158,14 +158,14 @@ class SerialService extends EventEmitter {
         return;
       }
 
-      // Extract values with flexible whitespace handling
-      const vibMatchNew = l.match(/Vibration\s*RMS:\s*([\d.]+)/i);
-      const flowMatchNew = l.match(/Flow\s*Rate:\s*([\d.]+)/i);
+      // Extract values with flexible whitespace handling (Supports V1, V2, and V3 labels)
+      const vibMatch = l.match(/(?:Vibration|Vibe)\s*RMS:\s*([\d.]+)/i);
+      const flowMatch = l.match(/Flow(?:\s*Rate)?\s*:\s*([\d.]+)/i);
       const oilMatch = l.match(/Oil\s*Temp:\s*([\d.]+)/i);
-      const atmMatch = l.match(/(?:Atmos|Atmospheric)\s*Temp:\s*([\d.]+)/i);
+      const atmMatch = l.match(/(?:Atmos|Atmospheric|Air)\s*Temp:\s*([\d.]+)/i);
       
-      if (vibMatchNew) this.currentBuffer.vibration = parseFloat(vibMatchNew[1]);
-      if (flowMatchNew) this.currentBuffer.flow = parseFloat(flowMatchNew[1]);
+      if (vibMatch) this.currentBuffer.vibration = parseFloat(vibMatch[1]);
+      if (flowMatch) this.currentBuffer.flow = parseFloat(flowMatch[1]);
       if (oilMatch) this.currentBuffer.oilTemp = parseFloat(oilMatch[1]);
       if (atmMatch) this.currentBuffer.ambientTemp = parseFloat(atmMatch[1]);
 
