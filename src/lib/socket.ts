@@ -25,6 +25,7 @@ export type SensorPayload = {
 
 export type AlertCode =
   | "LOW_FLOW"
+  | "HIGH_FLOW"
   | "HIGH_VIBRATION"
   | "HIGH_TEMP_DIFF"
   | "LOW_HEALTH"
@@ -34,10 +35,13 @@ export type AlertCode =
 type Listener = (p: SensorPayload) => void;
 
 const THRESH = {
-  flowMin: 2.5,
-  vibrationMax: 4.0,
-  oilTempMax: 41.0,
-  tempDiffMax: 15.0,
+  flowMin: 1.6,
+  flowMax: 2.1,
+  vibrationWatch: 8.5,
+  vibrationMax: 10.0,
+  oilTempWatch: 42.0,
+  oilTempMax: 45.0,
+  tempDiffMax: 8.0,
   healthMin: 60,
 };
 
@@ -136,17 +140,19 @@ class SocketManager {
 export const sim = new SocketManager();
 
 export const ALERT_LABEL: Record<AlertCode, string> = {
-  LOW_FLOW: "Low oil flow rate",
-  HIGH_VIBRATION: "High vibration",
-  HIGH_TEMP_DIFF: "High oil-atmos ΔT",
-  LOW_HEALTH: "Health index low",
-  CRITICAL_TEMPERATURE: "Critical oil temp",
+  LOW_FLOW: "Flow below 1.6 L/min",
+  HIGH_FLOW: "Flow above 2.1 L/min",
+  HIGH_VIBRATION: "Vibration exceeds 10 m/s\u00B2",
+  HIGH_TEMP_DIFF: "Oil-Atmos \u0394T exceeds 8\u00B0C",
+  LOW_HEALTH: "Health index below 60",
+  CRITICAL_TEMPERATURE: "Oil temp exceeds 45\u00B0C",
   ML_FAILURE_PREDICTED: "ML: failure predicted",
 };
 
 export const ALERT_SEVERITY: Record<AlertCode, "warning" | "critical"> = {
   LOW_FLOW: "warning",
-  HIGH_VIBRATION: "warning",
+  HIGH_FLOW: "warning",
+  HIGH_VIBRATION: "critical",
   HIGH_TEMP_DIFF: "warning",
   LOW_HEALTH: "warning",
   CRITICAL_TEMPERATURE: "critical",

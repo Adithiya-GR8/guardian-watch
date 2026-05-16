@@ -1,11 +1,22 @@
 export const THRESHOLDS = {
-  flowMin: 2.5,          // L/min
-  flowHigh: 10.0,        // L/min (unusual high flow)
-  vibrationMax: 4.0,     // g
-  tempDiffMax: 15.0,     // Celsius
-  oilTempMax: 41.0,      // Celsius
-  healthLow: 60,         // Index / 100
-  healthCritical: 40     // Index / 100
+  // Flow sensor — normal operating range: 1.6–2.1 L/min
+  flowMin: 1.6,            // L/min (below = critical)
+  flowMax: 2.1,            // L/min (above = unusually high)
+
+  // Vibration — m/s²
+  vibrationWatch: 8.5,     // m/s² (watch threshold)
+  vibrationMax: 10.0,      // m/s² (critical threshold)
+
+  // Oil temperature — °C
+  oilTempWatch: 42.0,      // °C (watch threshold)
+  oilTempMax: 45.0,        // °C (critical threshold)
+
+  // Oil − Atmospheric temperature difference — °C
+  tempDiffMax: 8.0,        // °C
+
+  // Health index — /100
+  healthLow: 60,           // Index / 100 (watch)
+  healthCritical: 40       // Index / 100 (critical)
 };
 
 export const SERIAL_CONFIG = {

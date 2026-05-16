@@ -96,35 +96,33 @@ function Dashboard() {
 
   const oilStatus = !latest
     ? "muted"
-    : latest.oilTemp > THRESH.oilTempMax
+    : latest.oilTemp > THRESH.oilTempMax          // > 45°C = critical
       ? "crit"
-      : latest.oilTemp > THRESH.oilTempMax * 0.9 // Warn if near 41
+      : latest.oilTemp > THRESH.oilTempWatch       // > 42°C = watch
         ? "warn"
-        : latest.mlPrediction?.temperature === "FAILURE"
-          ? "crit"
-          : latest.mlPrediction?.temperature === "WARNING"
-            ? "warn"
-            : "ok";
+        : "ok";
 
   const diffStatus = !latest || latest.tempDiff === null
     ? "muted"
-    : latest.tempDiff > THRESH.tempDiffMax
+    : latest.tempDiff > THRESH.tempDiffMax          // > 8°C = critical
       ? "crit"
-      : latest.tempDiff > THRESH.tempDiffMax * 0.75
+      : latest.tempDiff > THRESH.tempDiffMax * 0.75 // > 6°C = watch
         ? "warn"
         : "ok";
+
   const flowStatus = !latest
     ? "muted"
-    : latest.flow < THRESH.flowMin
+    : latest.flow < THRESH.flowMin                  // < 1.6 = critical
       ? "crit"
-      : latest.flow < THRESH.flowMin * 1.2
-        ? "warn"
+      : latest.flow > THRESH.flowMax                // > 2.1 = critical (outside range)
+        ? "crit"
         : "ok";
+
   const vibStatus = !latest
     ? "muted"
-    : latest.vibration > THRESH.vibrationMax
+    : latest.vibration > THRESH.vibrationMax        // > 10 = critical
       ? "crit"
-      : latest.vibration > THRESH.vibrationMax * 0.8 // Warn if near 4.0
+      : latest.vibration > THRESH.vibrationWatch    // > 8.5 = watch
         ? "warn"
         : "ok";
   const healthStatus = !latest

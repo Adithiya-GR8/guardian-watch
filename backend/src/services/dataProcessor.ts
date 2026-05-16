@@ -19,43 +19,56 @@ class DataProcessor {
       ? data.ambientTemp 
       : 25.0 + Math.sin(Date.now() / 100000) * 5; 
     
-    // 1. Calculate temperature difference
+    // 1. Calculate temperature difference (Oil − Atmospheric)
     const tempDiff = data.oilTemp - ambientTemp;
     if (tempDiff > THRESHOLDS.tempDiffMax) {
       alerts.push("HIGH_TEMP_DIFF");
     }
 
     // 2. Rule-based alerts
+    // Flow: normal range is 1.6–2.1 L/min
     if (data.flow < THRESHOLDS.flowMin) {
       alerts.push("LOW_FLOW");
     }
+    if (data.flow > THRESHOLDS.flowMax) {
+      alerts.push("HIGH_FLOW");
+    }
+
+    // Vibration: watch at 8.5, critical at 10.0 m/s²
     if (data.vibration > THRESHOLDS.vibrationMax) {
       alerts.push("HIGH_VIBRATION");
     }
+
+    // Oil temperature: watch at 42, critical at 45°C
     if (data.oilTemp > THRESHOLDS.oilTempMax) {
       alerts.push("CRITICAL_TEMPERATURE");
     }
 
     // 3. Cumulative Health Index Calculation (0-100)
-    // We calculate "penalty" points for each sensor
+    // Penalties are calibrated to the actual OFAF operating ranges.
     let penalty = 0;
 
     // Flow penalty (Up to 30 points)
-    // Optimal is > 3.5. Lower than 2.5 is failing.
-    if (data.flow < 3.5) {
-      penalty += Math.min(30, (3.5 - data.flow) * 30);
+    // Normal range is 1.6–2.1 L/min. Below 1.6 is failing.
+    if (data.flow < THRESHOLDS.flowMin) {
+      // Scale: 1.6 → 0 penalty, 0.0 → 30 penalty
+      penalty += Math.min(30, ((THRESHOLDS.flowMin - data.flow) / THRESHOLDS.flowMin) * 30);
     }
 
     // Vibration penalty (Up to 35 points)
-    // Normal is around 3.0. Above 4.0 is critical.
-    if (data.vibration > 3.0) {
-      penalty += Math.min(35, ((data.vibration - 3.0) / 1.0) * 35);
+    // Watch at 8.5, critical at 10.0 m/s²
+    if (data.vibration > THRESHOLDS.vibrationWatch) {
+      // Scale: 8.5 → 0 penalty, 10.0+ → 35 penalty
+      const vibRange = THRESHOLDS.vibrationMax - THRESHOLDS.vibrationWatch;
+      penalty += Math.min(35, ((data.vibration - THRESHOLDS.vibrationWatch) / vibRange) * 35);
     }
 
     // Temperature penalty (Up to 35 points)
-    // Normal oil temp is around 36. Above 41 is critical.
-    if (data.oilTemp > 36) {
-      penalty += Math.min(35, ((data.oilTemp - 36) / 5) * 35);
+    // Watch at 42, critical at 45°C
+    if (data.oilTemp > THRESHOLDS.oilTempWatch) {
+      // Scale: 42 → 0 penalty, 45+ → 35 penalty
+      const tempRange = THRESHOLDS.oilTempMax - THRESHOLDS.oilTempWatch;
+      penalty += Math.min(35, ((data.oilTemp - THRESHOLDS.oilTempWatch) / tempRange) * 35);
     }
 
     const healthIndex = Math.max(0, Math.round(100 - penalty));
@@ -63,6 +76,7 @@ class DataProcessor {
     if (healthIndex < THRESHOLDS.healthLow) {
       alerts.push("LOW_HEALTH");
     }
+
 
     const processed: ProcessedData = {
       ...data,
