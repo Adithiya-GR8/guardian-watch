@@ -1,11 +1,18 @@
 import { THRESHOLDS } from "../config/thresholds.js";
 import { SerialData } from "./serial.service.js";
+import type { SeverityResult } from "./severity.service.js";
 
 export interface ProcessedData extends SerialData {
   ambientTemp: number;
   tempDiff: number;
   healthIndex: number;
   alerts: string[];
+}
+
+/** ML detail scores passed from the ML service for health index enhancement */
+export interface MlHealthInput {
+  tempSeverity: SeverityResult;
+  vibSeverity: SeverityResult;
 }
 
 class DataProcessor {
@@ -77,7 +84,6 @@ class DataProcessor {
       alerts.push("LOW_HEALTH");
     }
 
-
     const processed: ProcessedData = {
       ...data,
       ambientTemp: parseFloat(ambientTemp.toFixed(2)),
@@ -90,9 +96,30 @@ class DataProcessor {
     return processed;
   }
 
+  /**
+   * Enhance the rule-based health index with ML severity scores.
+   * Applies up to 20 additional penalty points based on AI anomaly severity:
+   *   - Temperature severity contributes up to 10 points
+   *   - Vibration severity contributes up to 10 points
+   *
+   * This makes the health index predictive: ML can degrade the score
+   * BEFORE rule-based thresholds are breached, providing early warning.
+   */
+  public enhanceHealthIndex(baseHealth: number, mlInput?: MlHealthInput): number {
+    if (!mlInput) return baseHealth;
+
+    // ML severity score is 0–1. Scale each to max 10 penalty points.
+    const tempMlPenalty = Math.round(mlInput.tempSeverity.score * 10);
+    const vibMlPenalty  = Math.round(mlInput.vibSeverity.score * 10);
+    const totalMlPenalty = tempMlPenalty + vibMlPenalty;
+
+    return Math.max(0, baseHealth - totalMlPenalty);
+  }
+
   private clamp01(n: number) {
     return Math.max(0, Math.min(1, n));
   }
 }
 
 export const dataProcessor = new DataProcessor();
+

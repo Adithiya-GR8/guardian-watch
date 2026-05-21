@@ -8,6 +8,7 @@ import { serialService } from "./services/serial.service.js";
 import { dataProcessor } from "./services/dataProcessor.js";
 import { mlService } from "./services/ml.service.js";
 import { loggerService } from "./services/logger.service.js";
+import { validationService } from "./services/validation.service.js";
 
 dotenv.config();
 
@@ -25,15 +26,32 @@ socketServer.init(server);
 // Routes
 app.use("/api", apiRoutes);
 
-// Main Data Orchestrator
-serialService.on("data", async (serialData) => {
-  // 1. Process basic rules and calculate health index
-  const processed = dataProcessor.process(serialData);
+// =============================================================================
+// MAIN DATA ORCHESTRATOR
+// Pipeline: Serial → Validate → Process → ML Predict → Enhance Health → Broadcast
+// =============================================================================
 
-  // 2. Enrich with ML predictions
+serialService.on("data", async (serialData) => {
+  // 1. DATA VALIDATION — reject garbage before it enters the pipeline
+  const validated = validationService.validate(serialData);
+  if (!validated) return; // silently drop invalid readings
+
+  // 2. Process basic rules and calculate base health index
+  const processed = dataProcessor.process(validated);
+
+  // 3. Enrich with ML predictions (anomaly detection + severity scoring)
   const mlPredictions = await mlService.getPredictions(processed.vibration, processed.oilTemp);
 
-  // 3. Construct final payload
+  // 4. ENHANCE HEALTH INDEX — integrate ML severity into the score
+  const enhancedHealth = dataProcessor.enhanceHealthIndex(
+    processed.healthIndex,
+    {
+      tempSeverity: mlPredictions.details.tempSeverity,
+      vibSeverity: mlPredictions.details.vibSeverity,
+    }
+  );
+
+  // 5. Construct final payload
   const alerts = [...processed.alerts];
   if (mlPredictions.failure) {
     alerts.push("ML_FAILURE_PREDICTED");
@@ -48,16 +66,16 @@ serialService.on("data", async (serialData) => {
     flow: processed.flow,
     vibration: processed.vibration,
     tempDiff: processed.tempDiff,
-    healthIndex: processed.healthIndex,
+    healthIndex: enhancedHealth,
     alerts: alerts,
     mlPrediction: mlPredictions,
     ts: Date.now()
   };
 
-  // 4. Broadcast to all frontend clients
+  // 6. Broadcast to all frontend clients
   socketServer.broadcast(finalPayload);
 
-  // 5. Log to CSV (Comment the line below to disable logging)
+  // 7. Log to CSV
   loggerService.log(finalPayload);
 });
 
