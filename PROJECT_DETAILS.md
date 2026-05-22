@@ -1,7 +1,7 @@
-# Guardian Watch: Transformer Health Monitoring System - Technical Documentation
+# Transense: Transformer Health Monitoring System - Technical Documentation
 
 ## 1. Executive Summary
-Guardian Watch is an end-to-end IoT and AI solution designed for real-time monitoring and predictive maintenance of power transformers. The system captures critical physical parameters—vibration, oil flow, oil temperature, and ambient temperature—to detect early signs of mechanical wear, cooling system failure, or electrical anomalies. By combining rule-based heuristics with advanced Machine Learning (ML) models, it provides a comprehensive "Health Index" that allows operators to transition from reactive to proactive maintenance.
+Transense is an end-to-end IoT and AI solution designed for real-time monitoring and predictive maintenance of power transformers. The system captures critical physical parameters—vibration, oil flow, oil temperature, and ambient temperature—to detect early signs of mechanical wear, cooling system failure, or electrical anomalies. By combining rule-based heuristics with advanced Machine Learning (ML) models, it provides a comprehensive "Health Index" that allows operators to transition from reactive to proactive maintenance.
 
 ---
 

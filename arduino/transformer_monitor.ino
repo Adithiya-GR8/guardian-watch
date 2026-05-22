@@ -4,7 +4,7 @@
 #include <DallasTemperature.h>
 
 /**
- * REFACTORED SKETCH - Guardian Watch V3
+ * REFACTORED SKETCH - Transense V3
  * Features: Non-blocking vibration sampling & Atomic flow count.
  */
 
@@ -62,7 +62,7 @@ void setup() {
   ds18b20.begin();
   pinMode(LM35_PIN, INPUT);
 
-  Serial.println("Guardian Watch Online...");
+  Serial.println("Transense Online...");
 }
 
 void loop() {

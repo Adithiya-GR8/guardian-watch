@@ -1,6 +1,6 @@
 # AI-Based Transformer Health Monitoring Backend
 
-This is the production-ready backend for the Guardian Watch system. It interfaces directly with Arduino hardware via Serial and provides real-time telemetry enriched with Machine Learning predictions.
+This is the production-ready backend for the Transense system. It interfaces directly with Arduino hardware via Serial and provides real-time telemetry enriched with Machine Learning predictions.
 
 ## Architecture
 **Arduino UNO** (Serial) → **Node.js/TypeScript** (Processor) ↔ **Python FastAPI** (ML) → **Frontend** (WebSocket)

@@ -1,12 +1,12 @@
 """
-Guardian Watch — Vibration Anomaly Detection Model Training
+Transense — Vibration Anomaly Detection Model Training
 ============================================================
 Algorithm:  Isolation Forest (scikit-learn)
 Features:   vibration, rate_of_change, rolling_mean, rms, rolling_std
 Window:     10 readings (~10 seconds at 1 Hz)
 
-Train set:  data.csv, synthetic_data_1.csv, synthetic_data_2.csv, synthetic_data_3.csv
-Test set:   synthetic_data_4.csv, synthetic_data_5.csv
+Train set:  data.csv, data1.csv, data2.csv, data3.csv
+Test set:   data4.csv, data5.csv
 """
 
 import os
@@ -29,14 +29,14 @@ OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 TRAIN_FILES = [
     'data.csv',
-    'synthetic_data_1.csv',
-    'synthetic_data_2.csv',
-    'synthetic_data_3.csv',
+    'data1.csv',
+    'data2.csv',
+    'data3.csv',
 ]
 
 TEST_FILES = [
-    'synthetic_data_4.csv',
-    'synthetic_data_5.csv',
+    'data4.csv',
+    'data5.csv',
 ]
 
 TARGET_COL = 'Vibration_g'
@@ -52,7 +52,7 @@ RANDOM_STATE = 42
 # =============================================================================
 
 print("=" * 60)
-print("  GUARDIAN WATCH — VIBRATION MODEL TRAINING")
+print("  TRANSENSE — VIBRATION MODEL TRAINING")
 print("=" * 60)
 
 print("\n[1/4] Loading and engineering training features...")

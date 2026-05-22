@@ -1,4 +1,4 @@
-# Guardian Watch — ML Rewrite Implementation Plan
+# Transense — ML Rewrite Implementation Plan
 
 ## Goal
 Replace the existing multi-model ML system (Isolation Forest + LSTM Autoencoder) with two clean, separate Isolation Forest models focused on **temporal trend detection** rather than instant threshold detection. Output states: `NORMAL` or `WARNING` only.
@@ -427,7 +427,7 @@ models/
 Both training scripts will share a common CSV loading function. To keep them self-contained (no import dependencies between model folders), each script will include the parser inline or a shared utility file will be placed at `models/utils.py`.
 
 **Decision**: Place a `utils.py` at `models/utils.py` with:
-- `load_guardian_csv(filepath, target_column)` → returns DataFrame with `[Timestamp, target_column]`
+- `load_transense_csv(filepath, target_column)` → returns DataFrame with `[Timestamp, target_column]`
 - `compute_temp_features(df, window=10)` → returns feature DataFrame
 - `compute_vib_features(df, window=10)` → returns feature DataFrame
 

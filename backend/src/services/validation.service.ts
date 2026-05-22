@@ -1,7 +1,7 @@
 import { SerialData } from "./serial.service.js";
 
 /**
- * Guardian Watch — Data Validation Layer
+ * Transense — Data Validation Layer
  * ========================================
  * Prevents garbage input from reaching the ML pipeline.
  * Catches: NaN, DS18B20 errors (-127/85°C), out-of-range,

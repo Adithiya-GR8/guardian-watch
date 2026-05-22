@@ -1,4 +1,4 @@
-# Guardian Watch — ML System Verification Report
+# Transense — ML System Verification Report
 
 **Date**: 16 May 2026, 02:30 IST  
 **Engineer**: Antigravity ML Pipeline  
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-The Guardian Watch ML pipeline has been rebuilt from the ground up. Two separate Isolation Forest models (Temperature & Vibration) replace the previous Isolation Forest + LSTM Autoencoder architecture. TensorFlow has been removed entirely.
+The Transense ML pipeline has been rebuilt from the ground up. Two separate Isolation Forest models (Temperature & Vibration) replace the previous Isolation Forest + LSTM Autoencoder architecture. TensorFlow has been removed entirely.
 
 **All 6 verification phases passed.** The system correctly:
 - Loads both `.pkl` models on startup

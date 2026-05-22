@@ -107,7 +107,7 @@ serialService.on("connection", (connected) => {
 // Start Server
 server.listen(PORT, () => {
   console.log(`
-Guardian Watch Backend Running
+Transense Backend Running
 --------------------------------
 API: http://localhost:${PORT}/api
 WebSocket: ws://localhost:${PORT}

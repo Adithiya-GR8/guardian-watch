@@ -3,7 +3,7 @@ import { ML_CONFIG } from "../config/thresholds.js";
 import { severityService, type SeverityInput, type SeverityResult } from "./severity.service.js";
 
 /**
- * Guardian Watch — ML Service Client (Enhanced)
+ * Transense — ML Service Client (Enhanced)
  * ===============================================
  * Enhancements over v1:
  *   1. Multi-time-scale rate analysis (short 5 vs long 20 windows)

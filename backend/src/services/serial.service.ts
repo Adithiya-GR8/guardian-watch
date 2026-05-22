@@ -2,6 +2,12 @@ import { SerialPort } from "serialport";
 import { ReadlineParser } from "@serialport/parser-readline";
 import { SERIAL_CONFIG } from "../config/thresholds.js";
 import { EventEmitter } from "events";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface SerialData {
   flow: number;
@@ -71,7 +77,42 @@ class SerialService extends EventEmitter {
     }
   }
 
-  private cycleCount = 0;
+  private simulatorFiles = ["data4.csv", "data5.csv"];
+  private currentSimulatorFileIndex = 0;
+  private simulatorData: any[] = [];
+  private simulatorRowIndex = 0;
+
+  private loadSimulatorData() {
+    try {
+      const fileName = this.simulatorFiles[this.currentSimulatorFileIndex];
+      const logsDir = path.join(__dirname, "..", "..", "..", "logs");
+      const filePath = path.join(logsDir, fileName);
+      
+      if (!fs.existsSync(filePath)) {
+          console.error(`[SIMULATOR] File not found: ${filePath}`);
+          return false;
+      }
+      
+      const fileContent = fs.readFileSync(filePath, "utf-8");
+      const lines = fileContent.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+      
+      this.simulatorData = lines.slice(1).map(line => {
+        const parts = line.split(",");
+        return {
+           oilTemp: parseFloat(parts[2]),
+           vibration: parseFloat(parts[3]),
+           flow: parseFloat(parts[4]),
+           ambientTemp: parseFloat(parts[5])
+        };
+      });
+      this.simulatorRowIndex = 0;
+      console.log(`[SIMULATOR] Loaded ${this.simulatorData.length} rows from ${fileName}`);
+      return true;
+    } catch (e) {
+      console.error("[SIMULATOR] Error loading data:", e);
+      return false;
+    }
+  }
 
   private startSimulator() {
     this.isConnected = false;
@@ -79,30 +120,32 @@ class SerialService extends EventEmitter {
     
     if (this.simulateInterval) clearInterval(this.simulateInterval);
     
+    this.currentSimulatorFileIndex = 0;
+    const success = this.loadSimulatorData();
+    if (!success) {
+       console.error("[SIMULATOR] Could not start, no test data available.");
+       return;
+    }
+    
     this.simulateInterval = setInterval(() => {
-      this.cycleCount++;
-      
-      // Normally stable data
-      let flow = 3.5 + Math.sin(Date.now() / 5000) * 0.5 + (Math.random() * 0.1);
-      let temp = 40.0 + Math.sin(Date.now() / 10000) * 5 + (Math.random() * 0.2);
-      let vibration = 3.0 + Math.sin(Date.now() / 2000) * 0.2 + (Math.random() * 0.05);
-      
-      // Trigger Anomaly every 30 cycles (approx 30 seconds)
-      // Cycle 30-40 will be CRITICAL
-      const isAnomaly = (this.cycleCount % 60) >= 30 && (this.cycleCount % 60) <= 40;
-      
-      if (isAnomaly) {
-        // Sudden failure scenario: Low flow, high vibration, rising temp
-        flow = 1.2 + (Math.random() * 0.3); // Critical (< 2.5)
-        vibration = 4.0 + (Math.random() * 0.5); // Critical (> 3.5)
-        temp = 68.0 + (Math.random() * 5); // Critical (> 65)
+      if (this.simulatorRowIndex >= this.simulatorData.length) {
+          this.currentSimulatorFileIndex++;
+          if (this.currentSimulatorFileIndex >= this.simulatorFiles.length) {
+              this.currentSimulatorFileIndex = 0;
+          }
+          if (!this.loadSimulatorData()) {
+              clearInterval(this.simulateInterval!);
+              return;
+          }
       }
       
-      const line = `Flow (L/min): ${flow.toFixed(2)} | Temp (C): ${temp.toFixed(2)} | Vibration (g): ${vibration.toFixed(2)}`;
+      const row = this.simulatorData[this.simulatorRowIndex++];
+      const line = `Flow (L/min): ${row.flow.toFixed(2)} | Temp (C): ${row.oilTemp.toFixed(2)} | Vibration (g): ${row.vibration.toFixed(2)} | Ambient (C): ${row.ambientTemp.toFixed(2)}`;
       this.parseData(line);
+      
     }, 1000);
     
-    console.log("Simulator started with anomaly cycles 🟢");
+    console.log("Simulator started with CSV playback 🟢");
   }
 
   public disconnect(): void {
@@ -139,7 +182,7 @@ class SerialService extends EventEmitter {
       const l = line.trim();
       
       // 1. Handle Multi-line Block Format
-      if (l === "------ DATA ------" || l === "------ GUARDIAN DATA ------" || l === "--- SENSOR SUMMARY ---") {
+      if (l === "------ DATA ------" || l === "------ TRANSENSE DATA ------" || l === "--- SENSOR SUMMARY ---") {
         this.currentBuffer = {};
         return;
       }

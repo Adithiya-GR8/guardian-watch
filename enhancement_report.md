@@ -1,4 +1,4 @@
-# Guardian Watch — System Enhancement Report
+# Transense — System Enhancement Report
 
 **Date**: 21 May 2026  
 **Version**: v3.0 — Enhanced Predictive Intelligence  

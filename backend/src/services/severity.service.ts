@@ -1,5 +1,5 @@
 /**
- * Guardian Watch — Unified Severity Scoring
+ * Transense — Unified Severity Scoring
  * ==========================================
  * Combines ML anomaly score, rate-of-change, rolling std, persistence ratio,
  * and multi-time-scale trend acceleration into a single 0–1 severity metric.

@@ -1,5 +1,5 @@
 """
-Guardian Watch — ML Prediction Service (FastAPI)
+Transense — ML Prediction Service (FastAPI)
 =================================================
 Serves two stateless Isolation Forest models for real-time anomaly detection.
 Each endpoint accepts pre-computed features from the Node.js backend,
@@ -21,7 +21,7 @@ from typing import List
 # (Scaler was fitted with DataFrame columns; inference sends plain arrays)
 warnings.filterwarnings("ignore", message="X does not have valid feature names")
 
-app = FastAPI(title="Guardian Watch ML Service")
+app = FastAPI(title="Transense ML Service")
 
 # =============================================================================
 # MODEL PATHS
@@ -179,5 +179,5 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting Guardian Watch ML Service...")
+    print("Starting Transense ML Service...")
     uvicorn.run(app, host="127.0.0.1", port=8000)

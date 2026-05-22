@@ -1,5 +1,5 @@
 """
-Guardian Watch — Shared ML Utilities
+Transense — Shared ML Utilities
 CSV parser and feature engineering functions used by both training scripts.
 """
 
@@ -12,9 +12,9 @@ import os
 # CSV LOADING
 # =============================================================================
 
-def load_guardian_csv(filepath: str, target_column: str) -> pd.DataFrame:
+def load_transense_csv(filepath: str, target_column: str) -> pd.DataFrame:
     """
-    Load a Guardian Watch CSV and extract Timestamp + one target column.
+    Load a Transense CSV and extract Timestamp + one target column.
 
     Handles two format quirks:
       1. The timestamp contains a comma ("DD-MM-YYYY, HH:MM:SS am/pm")
@@ -146,7 +146,7 @@ def load_and_engineer(files: list, logs_dir: str, target_col: str, feature_fn, w
 
     for fname in files:
         filepath = os.path.join(logs_dir, fname)
-        df = load_guardian_csv(filepath, target_col)
+        df = load_transense_csv(filepath, target_col)
         features = feature_fn(df, window)
         print(f"  {fname}: {len(df)} raw rows -> {len(features)} feature rows")
         all_features.append(features)
